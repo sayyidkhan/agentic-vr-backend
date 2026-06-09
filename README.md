@@ -13,10 +13,10 @@ pause video -> analyze scene -> create agents -> chat with memory -> show orches
 - Python 3.13
 - FastAPI
 - SQLAlchemy + SQLite
-- Mangum for AWS Lambda
-- Docker for local container smoke checks
+- Docker for local and AWS Elastic Beanstalk runtime
+- Mangum for optional Lambda deployments
 - GitHub Actions CI/CD
-- AWS Lambda Function URL deployment
+- AWS Elastic Beanstalk Docker deployment
 
 ## Local Setup
 
@@ -60,29 +60,19 @@ docker build --platform linux/amd64 -f backend/Dockerfile.lambda -t sceneverse-b
 
 Current deployment path:
 
-- GitHub Actions assumes an AWS IAM role through OIDC.
-- The workflow packages the app as a Python 3.13 Lambda zip.
-- The workflow creates or updates `sceneverse-backend-prod`.
-- The API is exposed through a public Lambda Function URL.
-- SQLite is stored at `/tmp/sceneverse.db`, which is writable but not durable across cold starts.
+- AWS Elastic Beanstalk Docker on Amazon Linux 2023.
+- The root `Dockerfile` runs the backend with `python:3.13-slim`.
+- The app exposes `GET /` and `GET /health` for platform health checks.
+- SQLite is stored inside the running container/instance, which is fine for MVP smoke but not durable production storage.
 
-Required GitHub secret:
+The Lambda workflow is currently manual-only because this AWS account has an AWS Organizations SCP explicitly denying Lambda function creation and ECR repository creation for the GitHub deploy role.
 
-```text
-AWS_GITHUB_ACTIONS_ROLE_ARN=arn:aws:iam::<account-id>:role/sceneverse-backend-github-actions
-```
-
-Deploy workflow:
+Useful files:
 
 ```text
-.github/workflows/deploy-aws-lambda.yml
-```
-
-AWS helper scripts:
-
-```text
-infra/aws/bootstrap-github-actions.sh
-infra/aws/deploy-lambda-zip.sh
+Dockerfile
+backend/Dockerfile
+backend/app/main.py
 ```
 
 More detail lives in [backend/README.md](backend/README.md) and [infra/aws/README.md](infra/aws/README.md).

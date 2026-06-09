@@ -1,55 +1,38 @@
-# AWS CI/CD Setup
+# AWS Deployment Notes
 
-This repo uses GitHub Actions OIDC to deploy the backend to AWS Lambda as a Python 3.13 zip package.
+## Active Path: Elastic Beanstalk Docker
 
-## Target
+This AWS account has an AWS Organizations Service Control Policy that explicitly denies Lambda function creation and ECR repository creation for the GitHub Actions deploy role. The practical deployment path for this account is Elastic Beanstalk Docker.
 
-- Runtime: Python 3.13 Lambda zip package
-- API exposure: Lambda Function URL
-- Deployment: GitHub Actions + direct AWS Lambda create/update
-- MVP database: SQLite at `/tmp/sceneverse.db`
+Target:
 
-SQLite under `/tmp` is demo state only. Move to DynamoDB/RDS, or mount EFS for durable SQLite.
+- Platform: Elastic Beanstalk Docker running on Amazon Linux 2023
+- Runtime: `python:3.13-slim` from the root `Dockerfile`
+- API exposure: Beanstalk environment URL
+- MVP database: SQLite inside the running container
+- Health checks: `GET /` and `GET /health`
 
-## One-Time AWS Bootstrap
-
-Run this from AWS CloudShell or any terminal with AWS CLI authenticated to the target account:
-
-```bash
-cd agentic-vr-backend
-AWS_REGION=ap-southeast-2 \
-GITHUB_OWNER=sayyidkhan \
-GITHUB_REPO=agentic-vr-backend \
-GITHUB_BRANCH=main \
-bash infra/aws/bootstrap-github-actions.sh
-```
-
-The script creates or updates:
-
-- GitHub Actions OIDC provider, if missing
-- IAM role for GitHub Actions deploys
-- scoped Lambda and IAM permissions for the deploy workflow
-
-Then add this GitHub secret:
+Recommended environment variables:
 
 ```text
-AWS_GITHUB_ACTIONS_ROLE_ARN=<printed role arn>
+APP_NAME=SceneVerse AI Backend
+ENVIRONMENT=prod
+DATABASE_URL=sqlite:///./data/sceneverse.db
+FRONTEND_URL=http://localhost:5173
+CORS_ORIGINS=*
 ```
 
-Optional GitHub repository variables:
+## Optional Path: Lambda Zip
+
+The Lambda workflow and helper scripts are retained for an AWS account where Lambda creation is allowed.
+
+Files:
 
 ```text
-AWS_REGION=ap-southeast-2
-SERVICE_NAME=sceneverse-backend
-ENVIRONMENT_NAME=prod
-FRONTEND_URL=https://your-frontend-url
-CORS_ORIGINS=https://your-frontend-url
+.github/workflows/deploy-aws-lambda.yml
+infra/aws/bootstrap-github-actions.sh
+infra/aws/deploy-lambda-zip.sh
+infra/aws/lambda-app.yml
 ```
 
-## Deploy
-
-The deployment runs automatically on pushes to `main` that touch backend or infra files. It can also be triggered manually from GitHub Actions:
-
-```text
-Deploy Backend to AWS Lambda
-```
+The Lambda workflow is manual-only in this repo to avoid repeated failures in the current AWS organization.

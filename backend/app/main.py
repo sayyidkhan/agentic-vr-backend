@@ -50,6 +50,11 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok", app=settings.app_name, environment=settings.environment)
 
 
+@app.get("/", response_model=HealthResponse)
+def root() -> HealthResponse:
+    return health()
+
+
 @app.post("/api/scenes/analyze", response_model=AnalyzeSceneResponse)
 def analyze_scene(payload: AnalyzeSceneRequest, db: Session = Depends(get_db)) -> AnalyzeSceneResponse:
     result = scene_parser.analyze(payload)

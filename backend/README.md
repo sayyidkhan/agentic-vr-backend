@@ -28,8 +28,8 @@ It currently uses deterministic fallback agents and SQLite so the product loop c
 - Pydantic
 - SQLAlchemy
 - SQLite for MVP persistence
-- Mangum for AWS Lambda zip deployment
-- Docker
+- Docker for local and AWS Elastic Beanstalk runtime
+- Mangum for optional AWS Lambda deployment
 - GitHub Actions CI/CD
 - AWS Lambda Function URL deployment path
 
@@ -275,13 +275,13 @@ SQLite is not good for:
 - durable AWS Lambda local storage
 - high-concurrency writes
 
-For the first AWS Lambda deployment, the CI/CD workflow sets:
+For the first AWS Elastic Beanstalk Docker deployment, the container should use:
 
 ```text
-sqlite:////tmp/sceneverse.db
+sqlite:///./data/sceneverse.db
 ```
 
-That keeps the Lambda function writable, but `/tmp` is not durable across cold starts. For production, move to DynamoDB or RDS. If you insist on durable SQLite in AWS, mount EFS and point `DATABASE_URL` at that mounted path.
+That keeps the container writable, but local container storage is not durable if the instance is replaced. For production, move to DynamoDB or RDS. If you insist on durable SQLite in AWS, mount EFS and point `DATABASE_URL` at that mounted path.
 
 ## Docker
 
@@ -374,23 +374,26 @@ CI runs on backend changes and checks:
 - normal Docker build
 - Lambda Docker build
 
-Deployment target:
+Current AWS deployment target:
 
-- AWS Lambda Function URL
-- Python 3.13 Lambda zip package
-- Direct Lambda create/update through GitHub Actions OIDC
-- Public Lambda Function URL with `/health` smoke test
+- AWS Elastic Beanstalk Docker on Amazon Linux 2023
+- Root `Dockerfile` using `python:3.13-slim`
+- Public Beanstalk environment URL
+- `/` and `/health` health checks
 
-AWS infra files:
+Optional Lambda files are still present, but the Lambda workflow is manual-only because this AWS account currently has an AWS Organizations SCP denying Lambda creation and ECR repository creation for the GitHub deploy role.
+
+AWS-related files:
 
 ```text
+Dockerfile
 infra/aws/deploy-lambda-zip.sh
 infra/aws/lambda-app.yml
 infra/aws/bootstrap-github-actions.sh
 infra/aws/README.md
 ```
 
-Before deployment, bootstrap GitHub OIDC from AWS CloudShell or an authenticated AWS CLI:
+If you later move to an AWS account that allows Lambda, bootstrap GitHub OIDC from AWS CloudShell or an authenticated AWS CLI:
 
 ```bash
 AWS_REGION=ap-southeast-2 \
@@ -400,7 +403,7 @@ GITHUB_BRANCH=main \
 bash infra/aws/bootstrap-github-actions.sh
 ```
 
-Then set this GitHub secret:
+Then set this GitHub secret and manually run the Lambda workflow:
 
 ```text
 AWS_GITHUB_ACTIONS_ROLE_ARN=<printed role arn>
