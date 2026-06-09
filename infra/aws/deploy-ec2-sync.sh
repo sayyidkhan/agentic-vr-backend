@@ -30,6 +30,26 @@ log() {
   printf '[deploy-ec2] %s\n' "$*"
 }
 
+retry_curl() {
+  local url="$1"
+  local attempts="${2:-10}"
+  local delay_seconds="${3:-2}"
+  local attempt
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if curl -fsS "$url"; then
+      return 0
+    fi
+
+    if [[ "$attempt" -lt "$attempts" ]]; then
+      log "Health check not ready yet for ${url} (attempt ${attempt}/${attempts}); retrying in ${delay_seconds}s"
+      sleep "$delay_seconds"
+    fi
+  done
+
+  return 1
+}
+
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "Missing required command: $1" >&2
@@ -118,21 +138,32 @@ sudo docker run -d \
   -e CORS_ORIGINS="$CORS_ORIGINS" \
   "${REMOTE_CONTAINER_NAME}:latest" >/dev/null
 
-sleep 2
-curl -fsS http://127.0.0.1/health >/dev/null
-curl -fsS http://127.0.0.1/health/db >/dev/null
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -fsS http://127.0.0.1/health >/dev/null && curl -fsS http://127.0.0.1/health/db >/dev/null; then
+    break
+  fi
+
+  if [[ "$attempt" -eq 10 ]]; then
+    echo "Remote health checks failed after ${attempt} attempts" >&2
+    sudo docker logs --tail 200 "$REMOTE_CONTAINER_NAME" >&2 || true
+    exit 1
+  fi
+
+  sleep 2
+done
+
 sudo docker ps --filter "name=${REMOTE_CONTAINER_NAME}"
 REMOTE_SCRIPT
 } > "$REMOTE_SCRIPT_FILE"
 
 "${SSH_CMD[@]}" 'bash -se' < "$REMOTE_SCRIPT_FILE"
+log "Running live smoke checks against ${PUBLIC_BASE_URL}"
+retry_curl "${PUBLIC_BASE_URL}/health"
+printf '\n'
+retry_curl "${PUBLIC_BASE_URL}/health/db"
+printf '\n'
+
 rm -f "$REMOTE_SCRIPT_FILE"
 trap - EXIT
-
-log "Running live smoke checks against ${PUBLIC_BASE_URL}"
-curl -fsS "${PUBLIC_BASE_URL}/health"
-printf '\n'
-curl -fsS "${PUBLIC_BASE_URL}/health/db"
-printf '\n'
 
 log "Deploy complete."

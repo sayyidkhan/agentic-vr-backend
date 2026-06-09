@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     frontend_url: str = Field(default="http://localhost:5173", alias="FRONTEND_URL")
     bedrock_region: str = Field(default="us-east-1", alias="BEDROCK_REGION")
     bedrock_model_id: str = Field(default="amazon.nova-lite-v1:0", alias="BEDROCK_MODEL_ID")
+    bedrock_api_key: Optional[str] = Field(default=None, alias="AWS_BEARER_TOKEN_BEDROCK")
+    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    model_registry_path: str = Field(default="app/data/enabled_models.json", alias="MODEL_REGISTRY_PATH")
     exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")
     stripe_secret_key: Optional[str] = Field(default=None, alias="STRIPE_SECRET_KEY")
 

@@ -48,6 +48,48 @@ class BedrockProbeResponse(BaseModel):
     errorMessage: Optional[str] = None
 
 
+class ModelProbeRequest(BaseModel):
+    modelKey: Optional[str] = None
+    prompt: str = "Reply with the exact token MODEL_OK and one short sentence."
+
+
+class ModelProbeResponse(BaseModel):
+    status: Literal["ok", "error"]
+    modelKey: str
+    label: str
+    provider: str
+    transport: Literal["bedrock", "openai"]
+    modelId: str
+    region: Optional[str] = None
+    prompt: str
+    outputText: Optional[str] = None
+    errorType: Optional[str] = None
+    errorMessage: Optional[str] = None
+
+
+class ModelProbeBatchResponse(BaseModel):
+    status: Literal["ok", "partial", "error"]
+    prompt: str
+    results: list[ModelProbeResponse]
+
+
+class EnabledModelResponse(BaseModel):
+    key: str
+    label: str
+    provider: str
+    transport: Literal["bedrock", "openai"]
+    modelId: str
+    region: Optional[str] = None
+    enabled: bool
+    credentialSource: str
+    credentialConfigured: bool
+
+
+class ModelCatalogResponse(BaseModel):
+    defaultModelKey: str
+    models: list[EnabledModelResponse]
+
+
 class VideoMetadata(BaseModel):
     videoId: Optional[str] = None
     title: Optional[str] = None

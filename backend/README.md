@@ -137,18 +137,29 @@ ENVIRONMENT=local
 DATABASE_URL=sqlite:///./data/sceneverse.db
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 FRONTEND_URL=http://localhost:5173
+BEDROCK_REGION=us-east-1
+BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
+MODEL_REGISTRY_PATH=app/data/enabled_models.json
 
 OPENAI_API_KEY=
 EXA_API_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
+AWS_BEARER_TOKEN_BEDROCK=
 ```
 
 Current behavior:
 
-- `OPENAI_API_KEY` is not used yet.
+- `OPENAI_API_KEY` is only needed if you later add OpenAI-hosted models back into the registry.
 - `EXA_API_KEY` is not used yet.
 - Empty Stripe keys return a simulated unlock URL.
+- `MODEL_REGISTRY_PATH` points to the enabled multi-model config file.
+
+Current enabled Bedrock model registry:
+
+- `claude_sonnet_4_6` -> `global.anthropic.claude-sonnet-4-6`
+- `claude_haiku_4_5` -> `global.anthropic.claude-haiku-4-5-20251001-v1:0`
+- `kimi_k2_5` -> `moonshotai.kimi-k2.5`
 
 ## Database Migrations
 
@@ -227,7 +238,7 @@ Response includes:
 
 ### `POST /api/bedrock/test`
 
-Calls Amazon Bedrock from the backend using the server's AWS credentials.
+Calls Amazon Bedrock from the backend using the server's AWS credentials or a local Bedrock API key.
 
 This is the simplest server-side probe for verifying:
 
@@ -253,6 +264,43 @@ Response includes:
 - `region`
 - `prompt`
 - `outputText`
+
+### `GET /api/models`
+
+Lists the enabled model registry and whether the backend can resolve credentials for each configured model.
+
+Example:
+
+```bash
+curl http://localhost:8000/api/models
+```
+
+### `POST /api/models/test`
+
+Calls a specific configured model from the registry.
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/models/test \
+  -H "content-type: application/json" \
+  -d '{
+    "modelKey": "claude_haiku_4_5",
+    "prompt": "Reply with HAIKU_OK and one short sentence."
+  }'
+```
+
+### `POST /api/models/test-all`
+
+Calls every enabled model in the registry. This is the quickest end-to-end validation for local and deployed environments.
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/models/test-all \
+  -H "content-type: application/json" \
+  -d '{}'
+```
 - `errorType`
 - `errorMessage`
 
@@ -260,6 +308,62 @@ Relevant environment variables:
 
 - `BEDROCK_REGION`
 - `BEDROCK_MODEL_ID`
+- `AWS_BEARER_TOKEN_BEDROCK`
+
+Local auth note:
+
+- for localhost, you can use a Bedrock API key by setting `AWS_BEARER_TOKEN_BEDROCK`
+- for deployed EC2, prefer an instance IAM role and do not store a Bedrock API key on the host
+
+### `GET /api/models`
+
+Lists the enabled multi-model config and whether the backend currently has credentials to attempt each one.
+
+The default registry file is:
+
+- [`app/data/enabled_models.json`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/app/data/enabled_models.json)
+
+Current enabled models:
+
+- `gpt_4_1_mini`
+- `claude_sonnet_4_5`
+- `kimi_k2_5`
+
+### `POST /api/models/test`
+
+Tests one configured model by `modelKey`. If `modelKey` is omitted, the registry default is used.
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/models/test \
+  -H "content-type: application/json" \
+  -d '{
+    "modelKey": "claude_sonnet_4_5",
+    "prompt": "Reply with the exact token MODEL_OK and one short sentence."
+  }'
+```
+
+### `POST /api/models/test-all`
+
+Runs the same prompt against all enabled models in the registry and returns per-model status.
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/models/test-all \
+  -H "content-type: application/json" \
+  -d '{
+    "prompt": "Reply with the exact token MODEL_OK and one short sentence."
+  }'
+```
+
+Expected behavior:
+
+- GPT uses `OPENAI_API_KEY`
+- Claude and Kimi use Bedrock in `us-east-1`
+- Claude Sonnet 4.5 is configured through the Bedrock global inference profile ID, not the raw model ID
+- Claude or Kimi can still fail with model-access or Marketplace subscription errors even when IAM is correct
 
 ### `GET /api/db/{table_name}`
 

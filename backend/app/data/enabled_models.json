@@ -1,0 +1,32 @@
+{
+  "defaultModelKey": "claude_sonnet_4_6",
+  "models": [
+    {
+      "key": "claude_sonnet_4_6",
+      "label": "Claude Sonnet 4.6",
+      "provider": "anthropic",
+      "transport": "bedrock",
+      "modelId": "global.anthropic.claude-sonnet-4-6",
+      "region": "us-east-1",
+      "enabled": true
+    },
+    {
+      "key": "claude_haiku_4_5",
+      "label": "Claude Haiku 4.5",
+      "provider": "anthropic",
+      "transport": "bedrock",
+      "modelId": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "region": "us-east-1",
+      "enabled": true
+    },
+    {
+      "key": "kimi_k2_5",
+      "label": "Kimi K2.5",
+      "provider": "moonshotai",
+      "transport": "bedrock",
+      "modelId": "moonshotai.kimi-k2.5",
+      "region": "us-east-1",
+      "enabled": true
+    }
+  ]
+}

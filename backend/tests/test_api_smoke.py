@@ -7,6 +7,7 @@ from app.main import app
 def test_scene_chat_research_checkout_flow():
     with TestClient(app) as client:
         original_bedrock_runtime = app_main.bedrock_runtime
+        original_model_runtime = app_main.model_runtime
 
         class StubBedrockRuntime:
             def probe(self, prompt: str):
@@ -19,7 +20,86 @@ def test_scene_chat_research_checkout_flow():
                     outputText="BEDROCK_OK ready",
                 )
 
+        class StubModelRuntime:
+            def list_models(self):
+                return app_main.ModelCatalogResponse(
+                    defaultModelKey="claude_sonnet_4_6",
+                    models=[
+                        app_main.EnabledModelResponse(
+                            key="claude_sonnet_4_6",
+                            label="Claude Sonnet 4.6",
+                            provider="anthropic",
+                            transport="bedrock",
+                            modelId="global.anthropic.claude-sonnet-4-6",
+                            region="us-east-1",
+                            enabled=True,
+                            credentialSource="AWS_BEARER_TOKEN_BEDROCK",
+                            credentialConfigured=True,
+                        ),
+                        app_main.EnabledModelResponse(
+                            key="claude_haiku_4_5",
+                            label="Claude Haiku 4.5",
+                            provider="anthropic",
+                            transport="bedrock",
+                            modelId="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                            region="us-east-1",
+                            enabled=True,
+                            credentialSource="AWS_BEARER_TOKEN_BEDROCK",
+                            credentialConfigured=True,
+                        ),
+                        app_main.EnabledModelResponse(
+                            key="kimi_k2_5",
+                            label="Kimi K2.5",
+                            provider="moonshotai",
+                            transport="bedrock",
+                            modelId="moonshotai.kimi-k2.5",
+                            region="us-east-1",
+                            enabled=True,
+                            credentialSource="AWS_BEARER_TOKEN_BEDROCK",
+                            credentialConfigured=True,
+                        ),
+                    ],
+                )
+
+            def probe(self, prompt: str, model_key: str | None = None):
+                chosen_key = model_key or "claude_sonnet_4_6"
+                chosen_provider = "anthropic" if chosen_key in {"claude_sonnet_4_6", "claude_haiku_4_5"} else "moonshotai"
+                chosen_transport = "bedrock"
+                chosen_model_id = {
+                    "claude_sonnet_4_6": "global.anthropic.claude-sonnet-4-6",
+                    "claude_haiku_4_5": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+                    "kimi_k2_5": "moonshotai.kimi-k2.5",
+                }[chosen_key]
+                chosen_label = {
+                    "claude_sonnet_4_6": "Claude Sonnet 4.6",
+                    "claude_haiku_4_5": "Claude Haiku 4.5",
+                    "kimi_k2_5": "Kimi K2.5",
+                }[chosen_key]
+                return app_main.ModelProbeResponse(
+                    status="ok",
+                    modelKey=chosen_key,
+                    label=chosen_label,
+                    provider=chosen_provider,
+                    transport=chosen_transport,
+                    modelId=chosen_model_id,
+                    region="us-east-1",
+                    prompt=prompt,
+                    outputText=f"{chosen_key} ready",
+                )
+
+            def probe_all(self, prompt: str):
+                return app_main.ModelProbeBatchResponse(
+                    status="ok",
+                    prompt=prompt,
+                    results=[
+                        self.probe(prompt=prompt, model_key="claude_sonnet_4_6"),
+                        self.probe(prompt=prompt, model_key="claude_haiku_4_5"),
+                        self.probe(prompt=prompt, model_key="kimi_k2_5"),
+                    ],
+                )
+
         app_main.bedrock_runtime = StubBedrockRuntime()
+        app_main.model_runtime = StubModelRuntime()
         health = client.get("/health")
         assert health.status_code == 200
         assert health.json()["status"] == "ok"
@@ -29,6 +109,21 @@ def test_scene_chat_research_checkout_flow():
         assert bedrock_probe.json()["status"] == "ok"
         assert bedrock_probe.json()["provider"] == "amazon"
         assert "BEDROCK_OK" in bedrock_probe.json()["outputText"]
+
+        model_catalog = client.get("/api/models")
+        assert model_catalog.status_code == 200
+        assert model_catalog.json()["defaultModelKey"] == "claude_sonnet_4_6"
+        assert len(model_catalog.json()["models"]) == 3
+
+        model_probe = client.post("/api/models/test", json={"modelKey": "claude_haiku_4_5"})
+        assert model_probe.status_code == 200
+        assert model_probe.json()["provider"] == "anthropic"
+        assert model_probe.json()["transport"] == "bedrock"
+
+        model_probe_all = client.post("/api/models/test-all", json={})
+        assert model_probe_all.status_code == 200
+        assert model_probe_all.json()["status"] == "ok"
+        assert len(model_probe_all.json()["results"]) == 3
 
         db_health = client.get("/health/db")
         assert db_health.status_code == 200
@@ -113,3 +208,4 @@ def test_scene_chat_research_checkout_flow():
         missing_table = client.get("/api/db/not_a_table")
         assert missing_table.status_code == 404
         app_main.bedrock_runtime = original_bedrock_runtime
+        app_main.model_runtime = original_model_runtime

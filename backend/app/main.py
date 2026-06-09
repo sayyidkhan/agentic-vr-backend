@@ -23,6 +23,11 @@ from app.models.schemas import (
     CheckoutRequest,
     CheckoutResponse,
     DatabaseHealthResponse,
+    EnabledModelResponse,
+    ModelCatalogResponse,
+    ModelProbeBatchResponse,
+    ModelProbeRequest,
+    ModelProbeResponse,
     HealthResponse,
     NewCharacterSessionRequest,
     NewCharacterSessionResponse,
@@ -31,6 +36,7 @@ from app.models.schemas import (
 )
 from app.services.bedrock_runtime import BedrockRuntimeService
 from app.services.checkout import CheckoutService
+from app.services.model_runtime import ModelRuntimeService
 from app.store.sqlite_store import SQLiteStore
 
 settings = get_settings()
@@ -54,6 +60,7 @@ app.add_middleware(
 scene_parser = SceneParserAgent()
 orchestrator = OrchestratorAgent()
 bedrock_runtime = BedrockRuntimeService(settings=settings)
+model_runtime = ModelRuntimeService(settings=settings)
 checkout_service = CheckoutService(settings=settings)
 
 
@@ -66,6 +73,26 @@ def health() -> HealthResponse:
 def test_bedrock_connection(payload: BedrockProbeRequest | None = None) -> BedrockProbeResponse:
     request = payload or BedrockProbeRequest()
     return bedrock_runtime.probe(request.prompt)
+
+
+@app.get("/api/models", response_model=ModelCatalogResponse)
+def list_configured_models() -> ModelCatalogResponse:
+    return model_runtime.list_models()
+
+
+@app.post("/api/models/test", response_model=ModelProbeResponse)
+def test_configured_model(payload: ModelProbeRequest | None = None) -> ModelProbeResponse:
+    request = payload or ModelProbeRequest()
+    try:
+        return model_runtime.probe(prompt=request.prompt, model_key=request.modelKey)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/models/test-all", response_model=ModelProbeBatchResponse)
+def test_all_configured_models(payload: ModelProbeRequest | None = None) -> ModelProbeBatchResponse:
+    request = payload or ModelProbeRequest()
+    return model_runtime.probe_all(prompt=request.prompt)
 
 
 @app.get("/health/db", response_model=DatabaseHealthResponse)
