@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import List, Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 class SceneRecord(Base):
@@ -24,7 +28,7 @@ class SceneRecord(Base):
     objects_json: Mapped[str] = mapped_column(Text, nullable=False)
     director_context: Mapped[str] = mapped_column(Text, nullable=False)
     memory_summary: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     characters: Mapped[List["CharacterRecord"]] = relationship(
         back_populates="scene",
@@ -59,7 +63,7 @@ class ConversationTurnRecord(Base):
     agent_response: Mapped[str] = mapped_column(Text, nullable=False)
     memory_summary_after_turn: Mapped[str] = mapped_column(Text, nullable=False)
     agent_trace_json: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class ResearchContextRecord(Base):
@@ -70,4 +74,4 @@ class ResearchContextRecord(Base):
     query: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     used_by_agent: Mapped[str] = mapped_column(String(120), nullable=False, default="director")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

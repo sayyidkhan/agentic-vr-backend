@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.Column("objects_json", sa.Text(), nullable=False),
         sa.Column("director_context", sa.Text(), nullable=False),
         sa.Column("memory_summary", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("scene_id"),
     )
     op.create_table(
@@ -61,7 +61,7 @@ def upgrade() -> None:
         sa.Column("agent_response", sa.Text(), nullable=False),
         sa.Column("memory_summary_after_turn", sa.Text(), nullable=False),
         sa.Column("agent_trace_json", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["scene_id"], ["scenes.scene_id"]),
         sa.PrimaryKeyConstraint("turn_id"),
     )
@@ -73,7 +73,7 @@ def upgrade() -> None:
         sa.Column("query", sa.Text(), nullable=False),
         sa.Column("summary", sa.Text(), nullable=False),
         sa.Column("used_by_agent", sa.String(length=120), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["scene_id"], ["scenes.scene_id"]),
         sa.PrimaryKeyConstraint("research_id"),
     )
