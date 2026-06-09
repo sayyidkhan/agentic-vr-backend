@@ -15,6 +15,8 @@ from app.database import MANAGED_TABLES, get_db, init_db
 from app.models.schemas import (
     AnalyzeSceneRequest,
     AnalyzeSceneResponse,
+    BedrockProbeRequest,
+    BedrockProbeResponse,
     ChatRequest,
     ChatResponse,
     DatabaseTableContentsResponse,
@@ -27,6 +29,7 @@ from app.models.schemas import (
     ResearchRequest,
     ResearchResponse,
 )
+from app.services.bedrock_runtime import BedrockRuntimeService
 from app.services.checkout import CheckoutService
 from app.store.sqlite_store import SQLiteStore
 
@@ -50,12 +53,19 @@ app.add_middleware(
 
 scene_parser = SceneParserAgent()
 orchestrator = OrchestratorAgent()
+bedrock_runtime = BedrockRuntimeService(settings=settings)
 checkout_service = CheckoutService(settings=settings)
 
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(status="ok", app=settings.app_name, environment=settings.environment)
+
+
+@app.post("/api/bedrock/test", response_model=BedrockProbeResponse)
+def test_bedrock_connection(payload: BedrockProbeRequest | None = None) -> BedrockProbeResponse:
+    request = payload or BedrockProbeRequest()
+    return bedrock_runtime.probe(request.prompt)
 
 
 @app.get("/health/db", response_model=DatabaseHealthResponse)

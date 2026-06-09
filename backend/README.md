@@ -225,6 +225,42 @@ Response includes:
 - `journalMode`
 - `schemaRevision`
 
+### `POST /api/bedrock/test`
+
+Calls Amazon Bedrock from the backend using the server's AWS credentials.
+
+This is the simplest server-side probe for verifying:
+
+- the backend can resolve AWS credentials
+- the configured Bedrock model is reachable
+- runtime invocation permissions are present
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/bedrock/test \
+  -H "content-type: application/json" \
+  -d '{
+    "prompt": "Reply with the exact token BEDROCK_OK and one short sentence."
+  }'
+```
+
+Response includes:
+
+- `status`
+- `provider`
+- `modelId`
+- `region`
+- `prompt`
+- `outputText`
+- `errorType`
+- `errorMessage`
+
+Relevant environment variables:
+
+- `BEDROCK_REGION`
+- `BEDROCK_MODEL_ID`
+
 ### `GET /api/db/{table_name}`
 
 Read-only debug endpoint for inspecting DB rows without SSH.

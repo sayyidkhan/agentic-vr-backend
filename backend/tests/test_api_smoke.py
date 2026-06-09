@@ -1,13 +1,34 @@
 from fastapi.testclient import TestClient
+import app.main as app_main
 
 from app.main import app
 
 
 def test_scene_chat_research_checkout_flow():
     with TestClient(app) as client:
+        original_bedrock_runtime = app_main.bedrock_runtime
+
+        class StubBedrockRuntime:
+            def probe(self, prompt: str):
+                return app_main.BedrockProbeResponse(
+                    status="ok",
+                    provider="amazon",
+                    modelId="amazon.nova-lite-v1:0",
+                    region="us-east-1",
+                    prompt=prompt,
+                    outputText="BEDROCK_OK ready",
+                )
+
+        app_main.bedrock_runtime = StubBedrockRuntime()
         health = client.get("/health")
         assert health.status_code == 200
         assert health.json()["status"] == "ok"
+
+        bedrock_probe = client.post("/api/bedrock/test", json={})
+        assert bedrock_probe.status_code == 200
+        assert bedrock_probe.json()["status"] == "ok"
+        assert bedrock_probe.json()["provider"] == "amazon"
+        assert "BEDROCK_OK" in bedrock_probe.json()["outputText"]
 
         db_health = client.get("/health/db")
         assert db_health.status_code == 200
@@ -91,3 +112,4 @@ def test_scene_chat_research_checkout_flow():
 
         missing_table = client.get("/api/db/not_a_table")
         assert missing_table.status_code == 404
+        app_main.bedrock_runtime = original_bedrock_runtime

@@ -33,6 +33,21 @@ class DatabaseTableContentsResponse(BaseModel):
     rows: list[dict[str, Any]]
 
 
+class BedrockProbeRequest(BaseModel):
+    prompt: str = "Reply with the exact token BEDROCK_OK and one short sentence."
+
+
+class BedrockProbeResponse(BaseModel):
+    status: Literal["ok", "error"]
+    provider: str
+    modelId: str
+    region: str
+    prompt: str
+    outputText: Optional[str] = None
+    errorType: Optional[str] = None
+    errorMessage: Optional[str] = None
+
+
 class VideoMetadata(BaseModel):
     videoId: Optional[str] = None
     title: Optional[str] = None

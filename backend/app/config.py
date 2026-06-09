@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     database_url: str = Field(default="sqlite:///./data/sceneverse.db", alias="DATABASE_URL")
     cors_origins: str = Field(default="http://localhost:5173,http://localhost:3000", alias="CORS_ORIGINS")
     frontend_url: str = Field(default="http://localhost:5173", alias="FRONTEND_URL")
+    bedrock_region: str = Field(default="us-east-1", alias="BEDROCK_REGION")
+    bedrock_model_id: str = Field(default="amazon.nova-lite-v1:0", alias="BEDROCK_MODEL_ID")
     exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")
     stripe_secret_key: Optional[str] = Field(default=None, alias="STRIPE_SECRET_KEY")
 
