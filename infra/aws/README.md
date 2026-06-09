@@ -40,7 +40,13 @@ CORS_ORIGINS=*
 Runtime-secret sync:
 
 - The container now reads a persisted host env file at `/opt/sceneverse-config/shared.env`.
-- Sync your local backend env to EC2 with:
+- Sync your local backend env and deploy code in one step with:
+
+```bash
+./infra/aws/deploy-ec2-with-env.sh
+```
+
+- If you only want to sync runtime env without redeploying, use:
 
 ```bash
 ENABLE_LIVE_SCENE_ANALYSIS=true \
@@ -50,7 +56,7 @@ CHARACTER_CHAT_MODEL_ID=global.anthropic.claude-haiku-4-5-20251001-v1:0 \
 ./infra/aws/sync-ec2-env.sh
 ```
 
-- Then redeploy:
+- If you only want to redeploy code without resyncing env, use:
 
 ```bash
 ./infra/aws/deploy-ec2-sync.sh
@@ -160,10 +166,10 @@ Practical result:
 - CD to the live EC2 environment is currently local-script driven over SSH.
 - There is no GitHub Actions workflow currently redeploying the EC2 host on merge.
 
-Current EC2 deploy command from your local machine:
+Current EC2 env-sync-and-deploy command from your local machine:
 
 ```bash
-./infra/aws/deploy-ec2-sync.sh
+./infra/aws/deploy-ec2-with-env.sh
 ```
 
 Default assumptions:
@@ -184,6 +190,7 @@ PUBLIC_BASE_URL=http://18.207.53.115 \
 
 What the script does:
 
+- `deploy-ec2-with-env.sh` calls `sync-ec2-env.sh`, then `deploy-ec2-sync.sh`.
 - rsyncs the current local repo state to the EC2 instance
 - preserves SQLite at `/opt/sceneverse-data/sceneverse.db`
 - reads runtime secrets from `/opt/sceneverse-config/shared.env`
