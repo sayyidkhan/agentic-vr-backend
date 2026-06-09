@@ -12,8 +12,8 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-CURRENT_SCHEMA_REVISION = "20260609_0001"
-MANAGED_TABLES = {"scenes", "characters", "conversation_turns", "research_contexts"}
+CURRENT_SCHEMA_REVISION = "20260609_0002"
+MANAGED_TABLES = {"scenes", "characters", "conversation_turns", "research_contexts", "character_sessions"}
 
 if settings.database_url.startswith("sqlite:///"):
     sqlite_path = settings.database_url.replace("sqlite:///", "", 1)
@@ -30,16 +30,10 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db() -> None:
     from app.models import db  # noqa: F401
 
-    inspector = inspect(engine)
-    table_names = set(inspector.get_table_names())
-
-    if not MANAGED_TABLES.intersection(table_names):
-        Base.metadata.create_all(bind=engine)
-        _stamp_current_revision()
-        return
-
-    if "alembic_version" not in table_names:
-        Base.metadata.create_all(bind=engine)
+    # MVP deploys currently rely on SQLAlchemy metadata creation during startup.
+    # This keeps additive schema changes usable even before a full migration runner
+    # is wired into the container startup path.
+    Base.metadata.create_all(bind=engine)
     _stamp_current_revision()
 
 
@@ -58,6 +52,11 @@ def _stamp_current_revision() -> None:
         if version is None:
             connection.execute(
                 text("INSERT INTO alembic_version (version_num) VALUES (:version_num)"),
+                {"version_num": CURRENT_SCHEMA_REVISION},
+            )
+        elif version != CURRENT_SCHEMA_REVISION:
+            connection.execute(
+                text("UPDATE alembic_version SET version_num = :version_num"),
                 {"version_num": CURRENT_SCHEMA_REVISION},
             )
 

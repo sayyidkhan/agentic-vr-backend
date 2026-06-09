@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.db import CharacterRecord, ConversationTurnRecord, ResearchContextRecord, SceneRecord
+from app.models.db import CharacterSessionRecord
 from app.models.schemas import Character, ChatResponse, Scene
 
 
@@ -120,3 +121,15 @@ class SQLiteStore:
             )
         )
         self.db.commit()
+
+    def create_character_session(self, scene_id: str, character_id: str) -> str:
+        session_id = f"character_session_{uuid4().hex[:12]}"
+        self.db.add(
+            CharacterSessionRecord(
+                session_id=session_id,
+                scene_id=scene_id,
+                character_id=character_id,
+            )
+        )
+        self.db.commit()
+        return session_id

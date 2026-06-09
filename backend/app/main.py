@@ -22,6 +22,8 @@ from app.models.schemas import (
     CheckoutResponse,
     DatabaseHealthResponse,
     HealthResponse,
+    NewCharacterSessionRequest,
+    NewCharacterSessionResponse,
     ResearchRequest,
     ResearchResponse,
 )
@@ -103,6 +105,19 @@ def root() -> HealthResponse:
     return health()
 
 
+def _find_character(scene, character_id: str | None):
+    if character_id:
+        for character in scene.characters:
+            if character.characterId == character_id:
+                return character
+        raise HTTPException(status_code=404, detail=f"Character not found in scene: {character_id}")
+
+    if not scene.characters:
+        raise HTTPException(status_code=404, detail="No characters found for scene")
+
+    return scene.characters[0]
+
+
 def _serialize_debug_value(column_name: str, value: object) -> object:
     if value is None:
         return None
@@ -166,6 +181,31 @@ def analyze_scene(payload: AnalyzeSceneRequest, db: Session = Depends(get_db)) -
     result = scene_parser.analyze(payload)
     SQLiteStore(db).save_scene(result.scene)
     return result
+
+
+@app.post("/api/character/new", response_model=NewCharacterSessionResponse)
+def create_character_session(payload: NewCharacterSessionRequest, db: Session = Depends(get_db)) -> NewCharacterSessionResponse:
+    store = SQLiteStore(db)
+    scene = store.get_scene(payload.sceneId)
+    if scene is None:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    character = _find_character(scene, payload.characterId)
+    session_id = store.create_character_session(scene.sceneId, character.characterId)
+    opening_message = orchestrator.character_agent.opening_message(scene, character, scene.memorySummary)
+
+    return NewCharacterSessionResponse(
+        characterSessionId=session_id,
+        sceneId=scene.sceneId,
+        character=character,
+        openingMessage=opening_message,
+        memorySummary=scene.memorySummary,
+        suggestedPrompts=[
+            f"What are you trying to do right now, {character.name}?",
+            f"Who do you trust the least in this scene?",
+            "What are you not telling me yet?",
+        ],
+    )
 
 
 @app.post("/api/chat", response_model=ChatResponse)

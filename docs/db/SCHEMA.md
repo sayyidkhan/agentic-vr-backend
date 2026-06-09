@@ -9,7 +9,7 @@ Source of truth:
 
 Current schema revision:
 
-- `20260609_0001`
+- `20260609_0002`
 
 Current managed tables:
 
@@ -17,6 +17,7 @@ Current managed tables:
 - `characters`
 - `conversation_turns`
 - `research_contexts`
+- `character_sessions`
 - `alembic_version`
 
 ## Storage Notes
@@ -134,6 +135,26 @@ Columns:
 Indexes:
 
 - `ix_research_contexts_scene_id` on `scene_id`
+
+### `character_sessions`
+
+Primary purpose:
+
+- Stores lightweight character chat sessions created by `POST /api/character/new`
+
+Columns:
+
+| Column | Type | Null | Key | Notes |
+|---|---|---:|---|---|
+| `session_id` | `String(64)` | No | PK | Character chat session identifier |
+| `scene_id` | `String` | No | FK | References `scenes.scene_id` |
+| `character_id` | `String` | No | FK | References `characters.character_id` |
+| `created_at` | `DateTime(timezone=True)` | No |  | UTC creation timestamp |
+
+Indexes:
+
+- `ix_character_sessions_scene_id` on `scene_id`
+- `ix_character_sessions_character_id` on `character_id`
 
 ### `alembic_version`
 

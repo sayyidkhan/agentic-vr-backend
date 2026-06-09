@@ -2,6 +2,15 @@ from app.models.schemas import Character, Scene
 
 
 class CharacterAgent:
+    def opening_message(self, scene: Scene, character: Character, memory_summary: str) -> str:
+        goals = ", ".join(character.goals[:2]) if character.goals else "understand what is happening"
+        return (
+            f"{character.name}: {self._opening_for(character)} "
+            f"I am {character.role.lower()} in {scene.setting}. "
+            f"Right now I feel {character.emotionalState.lower()} and I am focused on {goals}. "
+            f"What I know so far: {memory_summary}"
+        )
+
     def respond(self, scene: Scene, character: Character, message: str, memory_summary: str) -> str:
         goals = ", ".join(character.goals[:2]) if character.goals else "understand what is happening"
         boundary = character.knowledgeBoundaries[0] if character.knowledgeBoundaries else "I only know what I can perceive in this scene."

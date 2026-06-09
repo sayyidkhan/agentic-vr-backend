@@ -58,6 +58,20 @@ class Character(BaseModel):
     speakingStyle: str
 
 
+class NewCharacterSessionRequest(BaseModel):
+    sceneId: str
+    characterId: Optional[str] = None
+
+
+class NewCharacterSessionResponse(BaseModel):
+    characterSessionId: str
+    sceneId: str
+    character: Character
+    openingMessage: str
+    memorySummary: str
+    suggestedPrompts: list[str]
+
+
 class Scene(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

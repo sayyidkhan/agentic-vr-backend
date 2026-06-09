@@ -75,3 +75,12 @@ class ResearchContextRecord(Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     used_by_agent: Mapped[str] = mapped_column(String(120), nullable=False, default="director")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class CharacterSessionRecord(Base):
+    __tablename__ = "character_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scene_id: Mapped[str] = mapped_column(ForeignKey("scenes.scene_id"), nullable=False, index=True)
+    character_id: Mapped[str] = mapped_column(ForeignKey("characters.character_id"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

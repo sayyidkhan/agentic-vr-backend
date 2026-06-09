@@ -249,6 +249,30 @@ Full schema and table details:
 
 - [`docs/db/SCHEMA.md`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/docs/db/SCHEMA.md)
 
+### `POST /api/character/new`
+
+Creates a lightweight character chat session for a previously analyzed scene.
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/character/new \
+  -H "content-type: application/json" \
+  -d '{
+    "sceneId": "scene_123",
+    "characterId": "scene_123_maya"
+  }'
+```
+
+Response includes:
+
+- `characterSessionId`
+- `sceneId`
+- `character`
+- `openingMessage`
+- `memorySummary`
+- `suggestedPrompts`
+
 ### `POST /api/scenes/analyze`
 
 Creates scene context from a paused frame.

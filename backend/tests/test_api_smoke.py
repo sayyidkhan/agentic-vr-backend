@@ -34,10 +34,25 @@ def test_scene_chat_research_checkout_flow():
         assert len(scene["characters"]) >= 2
         assert scene["agentTrace"][1]["status"] == "fallback"
 
+        character_session = client.post(
+            "/api/character/new",
+            json={"sceneId": scene["sceneId"], "characterId": scene["characters"][0]["characterId"]},
+        )
+        assert character_session.status_code == 200
+        character_session_data = character_session.json()
+        assert character_session_data["sceneId"] == scene["sceneId"]
+        assert character_session_data["character"]["characterId"] == scene["characters"][0]["characterId"]
+        assert character_session_data["characterSessionId"].startswith("character_session_")
+
         scene_rows = client.get("/api/db/scenes", params={"limit": 1})
         assert scene_rows.status_code == 200
         assert scene_rows.json()["rowCount"] >= initial_scene_count + 1
         assert scene_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
+
+        character_session_rows = client.get("/api/db/character_sessions", params={"limit": 1})
+        assert character_session_rows.status_code == 200
+        assert character_session_rows.json()["rowCount"] >= 1
+        assert character_session_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
 
         chat = client.post(
             "/api/chat",
