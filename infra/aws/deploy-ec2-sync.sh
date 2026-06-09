@@ -103,6 +103,7 @@ trap 'rm -f "$REMOTE_SCRIPT_FILE"' EXIT
 {
   printf 'set -euo pipefail\n'
   printf 'APP_NAME=%q\n' "$APP_NAME"
+  printf 'SCENEVERSE_PROFILE=%q\n' "$SCENEVERSE_PROFILE"
   printf 'ENVIRONMENT_NAME=%q\n' "$ENVIRONMENT_NAME"
   printf 'DATABASE_URL=%q\n' "$DATABASE_URL"
   printf 'FRONTEND_URL=%q\n' "$FRONTEND_URL"
