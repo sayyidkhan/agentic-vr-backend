@@ -1,0 +1,8 @@
+.aws-lambda-build/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+backend/.venv/
+backend/data/
+backend/.pytest_cache/

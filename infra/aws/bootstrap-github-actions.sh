@@ -6,13 +6,13 @@ GITHUB_OWNER="${GITHUB_OWNER:-sayyidkhan}"
 GITHUB_REPO="${GITHUB_REPO:-agentic-vr-backend}"
 GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
 ROLE_NAME="${ROLE_NAME:-sceneverse-backend-github-actions}"
-ECR_REPOSITORY="${ECR_REPOSITORY:-sceneverse-backend}"
-STACK_NAME_PREFIX="${STACK_NAME_PREFIX:-sceneverse-backend}"
+SERVICE_NAME="${SERVICE_NAME:-sceneverse-backend}"
+ENVIRONMENT_NAME="${ENVIRONMENT_NAME:-prod}"
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 OIDC_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
-ECR_REPOSITORY_ARN="arn:aws:ecr:${AWS_REGION}:${ACCOUNT_ID}:repository/${ECR_REPOSITORY}"
+FUNCTION_NAME="${SERVICE_NAME}-${ENVIRONMENT_NAME}"
 
 if aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$OIDC_ARN" >/dev/null 2>&1; then
   echo "GitHub OIDC provider already exists: $OIDC_ARN"
@@ -66,47 +66,6 @@ cat > "$DEPLOY_POLICY" <<JSON
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "EcrAuth",
-      "Effect": "Allow",
-      "Action": [
-        "ecr:GetAuthorizationToken"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "EcrRepositoryAccess",
-      "Effect": "Allow",
-      "Action": [
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:BatchGetImage",
-        "ecr:CompleteLayerUpload",
-        "ecr:CreateRepository",
-        "ecr:DescribeRepositories",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:InitiateLayerUpload",
-        "ecr:PutImage",
-        "ecr:PutImageScanningConfiguration",
-        "ecr:UploadLayerPart"
-      ],
-      "Resource": "${ECR_REPOSITORY_ARN}"
-    },
-    {
-      "Sid": "CloudFormationDeploy",
-      "Effect": "Allow",
-      "Action": [
-        "cloudformation:CreateChangeSet",
-        "cloudformation:CreateStack",
-        "cloudformation:DeleteChangeSet",
-        "cloudformation:DescribeChangeSet",
-        "cloudformation:DescribeStackEvents",
-        "cloudformation:DescribeStacks",
-        "cloudformation:ExecuteChangeSet",
-        "cloudformation:GetTemplate",
-        "cloudformation:UpdateStack"
-      ],
-      "Resource": "arn:aws:cloudformation:${AWS_REGION}:${ACCOUNT_ID}:stack/${STACK_NAME_PREFIX}*/*"
-    },
-    {
       "Sid": "LambdaDeploy",
       "Effect": "Allow",
       "Action": [
@@ -114,14 +73,16 @@ cat > "$DEPLOY_POLICY" <<JSON
         "lambda:CreateFunction",
         "lambda:CreateFunctionUrlConfig",
         "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
         "lambda:GetFunctionUrlConfig",
+        "lambda:GetPolicy",
         "lambda:RemovePermission",
         "lambda:TagResource",
         "lambda:UpdateFunctionCode",
         "lambda:UpdateFunctionConfiguration",
         "lambda:UpdateFunctionUrlConfig"
       ],
-      "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${STACK_NAME_PREFIX}*"
+      "Resource": "arn:aws:lambda:${AWS_REGION}:${ACCOUNT_ID}:function:${SERVICE_NAME}*"
     },
     {
       "Sid": "IamForLambdaExecutionRole",
@@ -129,15 +90,11 @@ cat > "$DEPLOY_POLICY" <<JSON
       "Action": [
         "iam:AttachRolePolicy",
         "iam:CreateRole",
-        "iam:DeleteRole",
-        "iam:DeleteRolePolicy",
-        "iam:DetachRolePolicy",
         "iam:GetRole",
         "iam:PassRole",
-        "iam:PutRolePolicy",
         "iam:TagRole"
       ],
-      "Resource": "arn:aws:iam::${ACCOUNT_ID}:role/${STACK_NAME_PREFIX}*"
+      "Resource": "arn:aws:iam::${ACCOUNT_ID}:role/${SERVICE_NAME}*"
     }
   ]
 }
@@ -148,12 +105,6 @@ aws iam put-role-policy \
   --policy-name SceneVerseBackendLambdaDeploy \
   --policy-document "file://${DEPLOY_POLICY}"
 
-aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 \
-  || aws ecr create-repository \
-    --repository-name "$ECR_REPOSITORY" \
-    --region "$AWS_REGION" \
-    --image-scanning-configuration scanOnPush=true >/dev/null
-
 echo
 echo "Bootstrap complete."
 echo "Set this GitHub secret:"
@@ -162,3 +113,4 @@ echo
 echo "GitHub repo: ${GITHUB_OWNER}/${GITHUB_REPO}"
 echo "Allowed deploy branch: ${GITHUB_BRANCH}"
 echo "AWS region: ${AWS_REGION}"
+echo "Lambda function: ${FUNCTION_NAME}"

@@ -1,13 +1,12 @@
 # AWS CI/CD Setup
 
-This repo uses GitHub Actions OIDC to deploy the backend to AWS Lambda as a Python 3.13 container image.
+This repo uses GitHub Actions OIDC to deploy the backend to AWS Lambda as a Python 3.13 zip package.
 
 ## Target
 
-- Runtime: Python 3.13 Lambda container image
+- Runtime: Python 3.13 Lambda zip package
 - API exposure: Lambda Function URL
-- Image registry: Amazon ECR
-- Deployment: GitHub Actions + CloudFormation
+- Deployment: GitHub Actions + direct AWS Lambda create/update
 - MVP database: SQLite at `/tmp/sceneverse.db`
 
 SQLite under `/tmp` is demo state only. Move to DynamoDB/RDS, or mount EFS for durable SQLite.
@@ -29,7 +28,7 @@ The script creates or updates:
 
 - GitHub Actions OIDC provider, if missing
 - IAM role for GitHub Actions deploys
-- ECR repository
+- scoped Lambda and IAM permissions for the deploy workflow
 
 Then add this GitHub secret:
 
@@ -41,9 +40,8 @@ Optional GitHub repository variables:
 
 ```text
 AWS_REGION=ap-southeast-2
-ECR_REPOSITORY=sceneverse-backend
-STACK_NAME=sceneverse-backend-lambda
 SERVICE_NAME=sceneverse-backend
+ENVIRONMENT_NAME=prod
 FRONTEND_URL=https://your-frontend-url
 CORS_ORIGINS=https://your-frontend-url
 ```

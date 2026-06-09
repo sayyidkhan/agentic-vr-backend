@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: SceneVerse AI backend Lambda Function URL deployment.
+Description: SceneVerse AI backend Lambda Function URL deployment using a zip artifact.
 
 Parameters:
   ServiceName:
@@ -8,7 +8,9 @@ Parameters:
   EnvironmentName:
     Type: String
     Default: prod
-  ImageUri:
+  CodeS3Bucket:
+    Type: String
+  CodeS3Key:
     Type: String
   FrontendUrl:
     Type: String
@@ -36,9 +38,11 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub "${ServiceName}-${EnvironmentName}"
-      PackageType: Image
+      Runtime: python3.13
+      Handler: app.lambda_handler.handler
       Code:
-        ImageUri: !Ref ImageUri
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
       Architectures:
         - x86_64
       Role: !GetAtt LambdaExecutionRole.Arn

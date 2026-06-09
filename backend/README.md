@@ -28,7 +28,7 @@ It currently uses deterministic fallback agents and SQLite so the product loop c
 - Pydantic
 - SQLAlchemy
 - SQLite for MVP persistence
-- Mangum for AWS Lambda container deployment
+- Mangum for AWS Lambda zip deployment
 - Docker
 - GitHub Actions CI/CD
 - AWS Lambda Function URL deployment path
@@ -61,7 +61,7 @@ backend/
   tests/
     test_api_smoke.py
   Dockerfile                 # Normal FastAPI container
-  Dockerfile.lambda          # AWS Lambda container image
+  Dockerfile.lambda          # Optional local Lambda container smoke image
   requirements.txt
   requirements-dev.txt
   pyproject.toml
@@ -272,10 +272,10 @@ SQLite is good for:
 SQLite is not good for:
 
 - multi-instance production APIs
-- durable AWS container-local storage
+- durable AWS Lambda local storage
 - high-concurrency writes
 
-For the first AWS Lambda deployment, the CI/CD template sets:
+For the first AWS Lambda deployment, the CI/CD workflow sets:
 
 ```text
 sqlite:////tmp/sceneverse.db
@@ -377,19 +377,20 @@ CI runs on backend changes and checks:
 Deployment target:
 
 - AWS Lambda Function URL
-- Python 3.13 Lambda container image
-- ECR image repository
-- CloudFormation stack
+- Python 3.13 Lambda zip package
+- Direct Lambda create/update through GitHub Actions OIDC
+- Public Lambda Function URL with `/health` smoke test
 
 AWS infra files:
 
 ```text
+infra/aws/deploy-lambda-zip.sh
 infra/aws/lambda-app.yml
 infra/aws/bootstrap-github-actions.sh
 infra/aws/README.md
 ```
 
-Before deployment, bootstrap GitHub OIDC and ECR from AWS CloudShell or an authenticated AWS CLI:
+Before deployment, bootstrap GitHub OIDC from AWS CloudShell or an authenticated AWS CLI:
 
 ```bash
 AWS_REGION=ap-southeast-2 \
