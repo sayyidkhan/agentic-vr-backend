@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +22,15 @@ class DatabaseHealthResponse(BaseModel):
     journalMode: Optional[str] = None
     schemaRevision: Optional[str] = None
     tableCount: Optional[int] = None
+
+
+class DatabaseTableContentsResponse(BaseModel):
+    table: str
+    columns: list[str]
+    limit: int
+    offset: int
+    rowCount: int
+    rows: list[dict[str, Any]]
 
 
 class VideoMetadata(BaseModel):

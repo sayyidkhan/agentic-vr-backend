@@ -1,19 +1,23 @@
 from contextlib import asynccontextmanager
+import json
+from datetime import date, datetime
+from decimal import Decimal
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
+from sqlalchemy import MetaData, Table, func, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.agents.orchestrator import OrchestratorAgent
 from app.agents.scene_parser import SceneParserAgent
 from app.config import get_settings
-from app.database import get_db, init_db
+from app.database import MANAGED_TABLES, get_db, init_db
 from app.models.schemas import (
     AnalyzeSceneRequest,
     AnalyzeSceneResponse,
     ChatRequest,
     ChatResponse,
+    DatabaseTableContentsResponse,
     CheckoutRequest,
     CheckoutResponse,
     DatabaseHealthResponse,
@@ -97,6 +101,64 @@ def database_health(db: Session = Depends(get_db)) -> DatabaseHealthResponse:
 @app.get("/", response_model=HealthResponse)
 def root() -> HealthResponse:
     return health()
+
+
+def _serialize_debug_value(column_name: str, value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, str) and column_name.endswith("_json"):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
+@app.get("/api/db/{table_name}", response_model=DatabaseTableContentsResponse)
+def database_table_contents(
+    table_name: str,
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> DatabaseTableContentsResponse:
+    inspector = inspect(db.bind)
+    table_names = set(inspector.get_table_names()) if db.bind is not None else set()
+
+    if table_name not in table_names:
+        raise HTTPException(status_code=404, detail=f"Table not found: {table_name}")
+
+    metadata = MetaData()
+    table = Table(table_name, metadata, autoload_with=db.bind)
+
+    total_rows = db.execute(select(func.count()).select_from(table)).scalar_one()
+
+    order_column = None
+    for candidate in ("created_at", f"{table_name[:-1]}_id", "scene_id"):
+        if candidate in table.c:
+            order_column = table.c[candidate]
+            break
+
+    query = select(table)
+    if order_column is not None:
+        query = query.order_by(order_column.desc())
+    query = query.limit(limit).offset(offset)
+
+    rows = []
+    for row in db.execute(query).mappings().all():
+        rows.append({key: _serialize_debug_value(key, value) for key, value in row.items()})
+
+    return DatabaseTableContentsResponse(
+        table=table_name,
+        columns=[column.name for column in table.columns],
+        limit=limit,
+        offset=offset,
+        rowCount=total_rows,
+        rows=rows,
+    )
 
 
 @app.post("/api/scenes/analyze", response_model=AnalyzeSceneResponse)

@@ -15,6 +15,11 @@ def test_scene_chat_research_checkout_flow():
         assert db_health.json()["database"] == "sqlite"
         assert db_health.json()["quickCheck"] == "ok"
 
+        empty_scenes = client.get("/api/db/scenes")
+        assert empty_scenes.status_code == 200
+        assert empty_scenes.json()["table"] == "scenes"
+        initial_scene_count = empty_scenes.json()["rowCount"]
+
         analyze = client.post(
             "/api/scenes/analyze",
             json={
@@ -29,6 +34,11 @@ def test_scene_chat_research_checkout_flow():
         assert len(scene["characters"]) >= 2
         assert scene["agentTrace"][1]["status"] == "fallback"
 
+        scene_rows = client.get("/api/db/scenes", params={"limit": 1})
+        assert scene_rows.status_code == 200
+        assert scene_rows.json()["rowCount"] >= initial_scene_count + 1
+        assert scene_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
+
         chat = client.post(
             "/api/chat",
             json={
@@ -40,6 +50,11 @@ def test_scene_chat_research_checkout_flow():
         assert chat.status_code == 200
         assert chat.json()["respondingAgent"]["type"] == "character"
 
+        turn_rows = client.get("/api/db/conversation_turns", params={"limit": 1})
+        assert turn_rows.status_code == 200
+        assert turn_rows.json()["rowCount"] >= 1
+        assert turn_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
+
         research = client.post(
             "/api/research",
             json={"sceneId": scene["sceneId"], "query": "What genre references does this scene evoke?"},
@@ -47,9 +62,17 @@ def test_scene_chat_research_checkout_flow():
         assert research.status_code == 200
         assert research.json()["sources"][0]["title"] == "Exa integration placeholder"
 
+        research_rows = client.get("/api/db/research_contexts", params={"limit": 1})
+        assert research_rows.status_code == 200
+        assert research_rows.json()["rowCount"] >= 1
+        assert research_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
+
         checkout = client.post(
             "/api/checkout",
             json={"sceneId": scene["sceneId"], "unlockType": "premium_scene"},
         )
         assert checkout.status_code == 200
         assert checkout.json()["mode"] == "simulated"
+
+        missing_table = client.get("/api/db/not_a_table")
+        assert missing_table.status_code == 404
