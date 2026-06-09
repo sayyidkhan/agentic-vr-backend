@@ -193,7 +193,7 @@ More detail lives in [backend/README.md](backend/README.md) and [infra/aws/READM
 
 Payments runbook:
 
-- [docs/payments/README.md](docs/payments/README.md)
+- [docs/payments/stripe-payments-docs.md](docs/payments/stripe-payments-docs.md)
 
 ## Current MVP Limits
 
