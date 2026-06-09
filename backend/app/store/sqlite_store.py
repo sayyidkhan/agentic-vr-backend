@@ -6,9 +6,8 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.db import CharacterRecord, ConversationTurnRecord, ResearchContextRecord, SceneRecord
-from app.models.db import CharacterSessionRecord
-from app.models.schemas import Character, ChatResponse, Scene
+from app.models.db import CharacterRecord, CharacterSessionRecord, ConversationTurnRecord, ResearchContextRecord, SceneRecord, VideoRecord
+from app.models.schemas import Character, ChatResponse, Scene, VideoAsset
 
 
 class SQLiteStore:
@@ -133,3 +132,75 @@ class SQLiteStore:
         )
         self.db.commit()
         return session_id
+
+    def create_video_link(self, url: str, source_type: str, title: str | None = None) -> VideoAsset:
+        record = VideoRecord(
+            video_id=f"video_{uuid4().hex[:12]}",
+            source_type=source_type,
+            title=title,
+            original_url=url,
+            status="ready",
+        )
+        self.db.add(record)
+        self.db.commit()
+        self.db.refresh(record)
+        return self._video_asset_from_record(record)
+
+    def create_uploaded_video(
+        self,
+        *,
+        video_id: str,
+        title: str | None,
+        original_filename: str | None,
+        storage_backend: str,
+        storage_key: str,
+        playback_url: str,
+        content_type: str | None,
+        file_size_bytes: int | None,
+    ) -> VideoAsset:
+        record = VideoRecord(
+            video_id=video_id,
+            source_type="upload",
+            title=title,
+            original_filename=original_filename,
+            storage_backend=storage_backend,
+            storage_key=storage_key,
+            playback_url=playback_url,
+            content_type=content_type,
+            file_size_bytes=file_size_bytes,
+            status="ready",
+        )
+        self.db.add(record)
+        self.db.commit()
+        self.db.refresh(record)
+        return self._video_asset_from_record(record)
+
+    def list_videos(self, *, limit: int, offset: int) -> tuple[list[VideoAsset], int]:
+        query = self.db.query(VideoRecord)
+        total = query.count()
+        records = query.order_by(VideoRecord.created_at.desc()).offset(offset).limit(limit).all()
+        return [self._video_asset_from_record(record) for record in records], total
+
+    def get_video(self, video_id: str) -> VideoAsset | None:
+        record = self.db.get(VideoRecord, video_id)
+        if record is None:
+            return None
+        return self._video_asset_from_record(record)
+
+    @staticmethod
+    def _video_asset_from_record(record: VideoRecord) -> VideoAsset:
+        return VideoAsset(
+            videoId=record.video_id,
+            sourceType=record.source_type,
+            title=record.title,
+            originalUrl=record.original_url,
+            originalFilename=record.original_filename,
+            storageBackend=record.storage_backend,
+            storageKey=record.storage_key,
+            playbackUrl=record.playback_url,
+            contentType=record.content_type,
+            fileSizeBytes=record.file_size_bytes,
+            status=record.status,
+            createdAt=record.created_at,
+            updatedAt=record.updated_at,
+        )

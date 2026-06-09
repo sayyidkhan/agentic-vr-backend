@@ -12,8 +12,8 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-CURRENT_SCHEMA_REVISION = "20260609_0002"
-MANAGED_TABLES = {"scenes", "characters", "conversation_turns", "research_contexts", "character_sessions"}
+CURRENT_SCHEMA_REVISION = "20260609_0003"
+MANAGED_TABLES = {"scenes", "characters", "conversation_turns", "research_contexts", "character_sessions", "videos"}
 
 if settings.database_url.startswith("sqlite:///"):
     sqlite_path = settings.database_url.replace("sqlite:///", "", 1)

@@ -96,6 +96,37 @@ class VideoMetadata(BaseModel):
     source: Optional[str] = None
 
 
+class VideoAsset(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    videoId: str
+    sourceType: Literal["upload", "youtube", "external_url"]
+    title: Optional[str] = None
+    originalUrl: Optional[str] = None
+    originalFilename: Optional[str] = None
+    storageBackend: Optional[str] = None
+    storageKey: Optional[str] = None
+    playbackUrl: Optional[str] = None
+    contentType: Optional[str] = None
+    fileSizeBytes: Optional[int] = None
+    status: str
+    createdAt: datetime
+    updatedAt: datetime
+
+
+class VideoListResponse(BaseModel):
+    items: list[VideoAsset]
+    limit: int
+    offset: int
+    rowCount: int
+
+
+class CreateVideoLinkRequest(BaseModel):
+    url: str = Field(min_length=1)
+    title: Optional[str] = None
+    sourceType: Literal["youtube", "external_url"] = "youtube"
+
+
 class AnalyzeSceneRequest(BaseModel):
     frame: Optional[str] = None
     timestamp: float = Field(ge=0)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import List, Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -84,3 +84,26 @@ class CharacterSessionRecord(Base):
     scene_id: Mapped[str] = mapped_column(ForeignKey("scenes.scene_id"), nullable=False, index=True)
     character_id: Mapped[str] = mapped_column(ForeignKey("characters.character_id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class VideoRecord(Base):
+    __tablename__ = "videos"
+
+    video_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    title: Mapped[str | None] = mapped_column(String(255))
+    original_url: Mapped[str | None] = mapped_column(Text)
+    original_filename: Mapped[str | None] = mapped_column(String(255))
+    storage_backend: Mapped[str | None] = mapped_column(String(32))
+    storage_key: Mapped[str | None] = mapped_column(Text)
+    playback_url: Mapped[str | None] = mapped_column(Text)
+    content_type: Mapped[str | None] = mapped_column(String(120))
+    file_size_bytes: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ready")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )

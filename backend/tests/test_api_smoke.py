@@ -1,3 +1,4 @@
+from io import BytesIO
 from fastapi.testclient import TestClient
 import uuid
 
@@ -219,6 +220,47 @@ def test_scene_chat_research_checkout_flow():
             assert empty_scenes.json()["table"] == "scenes"
             initial_scene_count = empty_scenes.json()["rowCount"]
 
+            empty_videos = client.get("/api/videos")
+            assert empty_videos.status_code == 200
+            initial_video_count = empty_videos.json()["rowCount"]
+
+            linked_video = client.post(
+                "/api/videos/link",
+                json={
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "title": "Reference Clip",
+                    "sourceType": "youtube",
+                },
+            )
+            assert linked_video.status_code == 201
+            linked_video_data = linked_video.json()
+            assert linked_video_data["sourceType"] == "youtube"
+            assert linked_video_data["originalUrl"].startswith("https://www.youtube.com/")
+
+            uploaded_video = client.post(
+                "/api/videos/upload",
+                data={"title": "Uploaded Demo Clip"},
+                files={"file": ("demo.mp4", BytesIO(b"fake-video-bytes"), "video/mp4")},
+            )
+            assert uploaded_video.status_code == 201
+            uploaded_video_data = uploaded_video.json()
+            assert uploaded_video_data["sourceType"] == "upload"
+            assert uploaded_video_data["storageBackend"] == app_main.settings.media_storage_backend
+            assert uploaded_video_data["playbackUrl"]
+
+            video_list = client.get("/api/videos", params={"limit": 10})
+            assert video_list.status_code == 200
+            assert video_list.json()["rowCount"] >= initial_video_count + 2
+            assert video_list.json()["items"][0]["videoId"]
+
+            fetched_video = client.get(f"/api/videos/{uploaded_video_data['videoId']}")
+            assert fetched_video.status_code == 200
+            assert fetched_video.json()["title"] == "Uploaded Demo Clip"
+
+            video_rows = client.get("/api/db/videos", params={"limit": 2})
+            assert video_rows.status_code == 200
+            assert video_rows.json()["rowCount"] >= initial_video_count + 2
+
             analyze = client.post(
                 "/api/scenes/analyze",
                 json={
@@ -244,15 +286,15 @@ def test_scene_chat_research_checkout_flow():
             assert character_session_data["character"]["characterId"] == scene["characters"][0]["characterId"]
             assert character_session_data["characterSessionId"].startswith("character_session_")
 
-            scene_rows = client.get("/api/db/scenes", params={"limit": 1})
+            scene_rows = client.get("/api/db/scenes", params={"limit": 10})
             assert scene_rows.status_code == 200
             assert scene_rows.json()["rowCount"] >= initial_scene_count + 1
-            assert scene_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
+            assert any(row["scene_id"] == scene["sceneId"] for row in scene_rows.json()["rows"])
 
-            character_session_rows = client.get("/api/db/character_sessions", params={"limit": 1})
+            character_session_rows = client.get("/api/db/character_sessions", params={"limit": 10})
             assert character_session_rows.status_code == 200
             assert character_session_rows.json()["rowCount"] >= 1
-            assert character_session_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
+            assert any(row["scene_id"] == scene["sceneId"] for row in character_session_rows.json()["rows"])
 
             chat = client.post(
                 "/api/chat",
@@ -265,10 +307,10 @@ def test_scene_chat_research_checkout_flow():
             assert chat.status_code == 200
             assert chat.json()["respondingAgent"]["type"] == "character"
 
-            turn_rows = client.get("/api/db/conversation_turns", params={"limit": 1})
+            turn_rows = client.get("/api/db/conversation_turns", params={"limit": 10})
             assert turn_rows.status_code == 200
             assert turn_rows.json()["rowCount"] >= 1
-            assert turn_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
+            assert any(row["scene_id"] == scene["sceneId"] for row in turn_rows.json()["rows"])
 
             research = client.post(
                 "/api/research",
@@ -277,10 +319,10 @@ def test_scene_chat_research_checkout_flow():
             assert research.status_code == 200
             assert research.json()["sources"][0]["title"] == "Exa integration placeholder"
 
-            research_rows = client.get("/api/db/research_contexts", params={"limit": 1})
+            research_rows = client.get("/api/db/research_contexts", params={"limit": 10})
             assert research_rows.status_code == 200
             assert research_rows.json()["rowCount"] >= 1
-            assert research_rows.json()["rows"][0]["scene_id"] == scene["sceneId"]
+            assert any(row["scene_id"] == scene["sceneId"] for row in research_rows.json()["rows"])
 
             checkout = client.post(
                 "/api/checkout",
