@@ -43,7 +43,11 @@ Runtime-secret sync:
 - Sync your local backend env to EC2 with:
 
 ```bash
-ENABLE_LIVE_SCENE_ANALYSIS=true ENABLE_EXA_CHARACTER_ENRICHMENT=true ./infra/aws/sync-ec2-env.sh
+ENABLE_LIVE_SCENE_ANALYSIS=true \
+ENABLE_EXA_CHARACTER_ENRICHMENT=true \
+ENABLE_LIVE_CHARACTER_CHAT=true \
+CHARACTER_CHAT_MODEL_ID=global.anthropic.claude-haiku-4-5-20251001-v1:0 \
+./infra/aws/sync-ec2-env.sh
 ```
 
 - Then redeploy:

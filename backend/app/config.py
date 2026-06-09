@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     database_url: str = Field(default="sqlite:///./data/sceneverse.db", alias="DATABASE_URL")
     cors_origins: str = Field(default="http://localhost:5173,http://localhost:3000", alias="CORS_ORIGINS")
     frontend_url: str = Field(default="http://localhost:5173", alias="FRONTEND_URL")
+    aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
     bedrock_region: str = Field(default="us-east-1", alias="BEDROCK_REGION")
     bedrock_model_id: str = Field(default="amazon.nova-lite-v1:0", alias="BEDROCK_MODEL_ID")
     bedrock_api_key: Optional[str] = Field(default=None, alias="AWS_BEARER_TOKEN_BEDROCK")
@@ -22,8 +23,19 @@ class Settings(BaseSettings):
     scene_analysis_model_id: str = Field(default="global.anthropic.claude-sonnet-4-6", alias="SCENE_ANALYSIS_MODEL_ID")
     enable_exa_character_enrichment: bool = Field(default=True, alias="ENABLE_EXA_CHARACTER_ENRICHMENT")
     scene_analysis_max_characters: int = Field(default=4, alias="SCENE_ANALYSIS_MAX_CHARACTERS")
+    enable_live_character_chat: bool = Field(default=False, alias="ENABLE_LIVE_CHARACTER_CHAT")
+    character_chat_model_id: str = Field(
+        default="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        alias="CHARACTER_CHAT_MODEL_ID",
+    )
     exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")
     stripe_secret_key: Optional[str] = Field(default=None, alias="STRIPE_SECRET_KEY")
+    media_storage_backend: str = Field(default="local", alias="MEDIA_STORAGE_BACKEND")
+    media_local_dir: str = Field(default="./data/media", alias="MEDIA_LOCAL_DIR")
+    media_public_path: str = Field(default="/media", alias="MEDIA_PUBLIC_PATH")
+    media_storage_prefix: str = Field(default="videos", alias="MEDIA_STORAGE_PREFIX")
+    s3_video_bucket: Optional[str] = Field(default=None, alias="S3_VIDEO_BUCKET")
+    media_cdn_base_url: Optional[str] = Field(default=None, alias="MEDIA_CDN_BASE_URL")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

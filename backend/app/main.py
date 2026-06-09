@@ -2,9 +2,12 @@ from contextlib import asynccontextmanager
 import json
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import MetaData, Table, func, inspect, select, text
 from sqlalchemy.orm import Session
 
@@ -20,6 +23,7 @@ from app.models.schemas import (
     BedrockProbeResponse,
     ChatRequest,
     ChatResponse,
+    CreateVideoLinkRequest,
     DatabaseTableContentsResponse,
     CheckoutRequest,
     CheckoutResponse,
@@ -29,6 +33,8 @@ from app.models.schemas import (
     ModelProbeBatchResponse,
     ModelProbeRequest,
     ModelProbeResponse,
+    VideoAsset,
+    VideoListResponse,
     HealthResponse,
     NewCharacterSessionRequest,
     NewCharacterSessionResponse,
@@ -38,9 +44,11 @@ from app.models.schemas import (
 from app.services.bedrock_runtime import BedrockRuntimeService
 from app.services.checkout import CheckoutService
 from app.services.model_runtime import ModelRuntimeService
+from app.services.video_storage import VideoStorageService
 from app.store.sqlite_store import SQLiteStore
 
 settings = get_settings()
+Path(settings.media_local_dir).mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -57,10 +65,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.mount(settings.media_public_path, StaticFiles(directory=settings.media_local_dir), name="media")
 
 research_agent = ResearchAgent(settings=settings)
 scene_parser = SceneParserAgent(settings=settings)
-orchestrator = OrchestratorAgent(research_agent=research_agent)
+orchestrator = OrchestratorAgent(settings=settings, research_agent=research_agent)
 bedrock_runtime = BedrockRuntimeService(settings=settings)
 model_runtime = ModelRuntimeService(settings=settings)
 checkout_service = CheckoutService(settings=settings)
@@ -212,6 +221,49 @@ def database_table_contents(
         offset=offset,
         rowCount=total_rows,
         rows=rows,
+    )
+
+
+@app.get("/api/videos", response_model=VideoListResponse)
+def list_videos(
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> VideoListResponse:
+    items, total = SQLiteStore(db).list_videos(limit=limit, offset=offset)
+    return VideoListResponse(items=items, limit=limit, offset=offset, rowCount=total)
+
+
+@app.get("/api/videos/{video_id}", response_model=VideoAsset)
+def get_video(video_id: str, db: Session = Depends(get_db)) -> VideoAsset:
+    video = SQLiteStore(db).get_video(video_id)
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return video
+
+
+@app.post("/api/videos/link", response_model=VideoAsset, status_code=status.HTTP_201_CREATED)
+def create_video_link(payload: CreateVideoLinkRequest, db: Session = Depends(get_db)) -> VideoAsset:
+    return SQLiteStore(db).create_video_link(url=payload.url, source_type=payload.sourceType, title=payload.title)
+
+
+@app.post("/api/videos/upload", response_model=VideoAsset, status_code=status.HTTP_201_CREATED)
+def upload_video(
+    file: UploadFile = File(...),
+    title: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+) -> VideoAsset:
+    video_id = f"video_{uuid4().hex[:12]}"
+    stored_video = VideoStorageService(settings).store_upload(file, video_id=video_id)
+    return SQLiteStore(db).create_uploaded_video(
+        video_id=video_id,
+        title=title,
+        original_filename=file.filename,
+        storage_backend=stored_video.storage_backend,
+        storage_key=stored_video.storage_key,
+        playback_url=stored_video.playback_url,
+        content_type=stored_video.content_type,
+        file_size_bytes=stored_video.file_size_bytes,
     )
 
 

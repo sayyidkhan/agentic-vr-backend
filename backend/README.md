@@ -18,6 +18,7 @@ It currently uses SQLite for MVP persistence, with optional live Bedrock scene a
 - Routes chat through a lightweight orchestrator.
 - Supports Character Agent, Director Agent, Memory Agent, and Exa-backed Research Agent flows.
 - Persists scene state, characters, conversation turns, and research summaries in SQLite.
+- Persists uploaded videos and external video references in SQLite.
 - Returns `agentTrace` arrays so the frontend can show visible multi-agent coordination.
 - Provides a simulated Stripe unlock path until real Stripe Checkout is wired.
 
@@ -29,6 +30,7 @@ It currently uses SQLite for MVP persistence, with optional live Bedrock scene a
 - SQLAlchemy
 - Alembic
 - SQLite for MVP persistence
+- Local or S3-backed media storage for uploaded videos
 - Docker for local and AWS EC2 runtime
 - Mangum for optional AWS Lambda deployment
 - GitHub Actions CI
@@ -55,6 +57,7 @@ backend/
       db.py                  # SQLAlchemy records
     services/
       checkout.py            # Stripe/simulated checkout service
+      video_storage.py       # Local/S3 upload storage adapter
     store/
       sqlite_store.py        # SQLite persistence adapter
     data/
@@ -137,6 +140,7 @@ ENVIRONMENT=local
 DATABASE_URL=sqlite:///./data/sceneverse.db
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 FRONTEND_URL=http://localhost:5173
+AWS_REGION=us-east-1
 BEDROCK_REGION=us-east-1
 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
 MODEL_REGISTRY_PATH=app/data/enabled_models.json
@@ -144,6 +148,14 @@ ENABLE_LIVE_SCENE_ANALYSIS=false
 SCENE_ANALYSIS_MODEL_ID=global.anthropic.claude-sonnet-4-6
 ENABLE_EXA_CHARACTER_ENRICHMENT=true
 SCENE_ANALYSIS_MAX_CHARACTERS=4
+ENABLE_LIVE_CHARACTER_CHAT=false
+CHARACTER_CHAT_MODEL_ID=global.anthropic.claude-haiku-4-5-20251001-v1:0
+MEDIA_STORAGE_BACKEND=local
+MEDIA_LOCAL_DIR=./data/media
+MEDIA_PUBLIC_PATH=/media
+MEDIA_STORAGE_PREFIX=videos
+S3_VIDEO_BUCKET=
+MEDIA_CDN_BASE_URL=
 
 OPENAI_API_KEY=
 EXA_API_KEY=
@@ -160,12 +172,25 @@ Current behavior:
 - `MODEL_REGISTRY_PATH` points to the enabled multi-model config file.
 - `ENABLE_LIVE_SCENE_ANALYSIS=true` turns on Bedrock vision parsing for `/api/scenes/analyze`.
 - `SCENE_ANALYSIS_MODEL_ID` controls the Bedrock vision model used for scene parsing.
+- `ENABLE_LIVE_CHARACTER_CHAT=true` turns on Bedrock-backed character voice generation.
+- `CHARACTER_CHAT_MODEL_ID` controls the Bedrock model used for character responses.
+- `MEDIA_STORAGE_BACKEND=local` stores uploads under `MEDIA_LOCAL_DIR` and serves them from `MEDIA_PUBLIC_PATH`.
+- `MEDIA_STORAGE_BACKEND=s3` uploads videos to `S3_VIDEO_BUCKET`; if `MEDIA_CDN_BASE_URL` is set, playback URLs point there.
 
 Current enabled Bedrock model registry:
 
 - `claude_sonnet_4_6` -> `global.anthropic.claude-sonnet-4-6`
 - `claude_haiku_4_5` -> `global.anthropic.claude-haiku-4-5-20251001-v1:0`
 - `kimi_k2_5` -> `moonshotai.kimi-k2.5`
+
+## Media APIs
+
+The backend exposes a minimal video/media surface for hackathon use:
+
+- `GET /api/videos` returns the paginated video list.
+- `GET /api/videos/{videoId}` returns a single stored video record.
+- `POST /api/videos/link` stores a YouTube or external reference URL without downloading the video.
+- `POST /api/videos/upload` accepts a multipart file upload, stores it in local storage or S3, and creates the video record.
 
 ## Database Migrations
 
@@ -205,6 +230,10 @@ The smoke test covers:
 
 - `GET /health`
 - `GET /health/db`
+- `GET /api/videos`
+- `GET /api/videos/{videoId}`
+- `POST /api/videos/link`
+- `POST /api/videos/upload`
 - `POST /api/scenes/analyze`
 - `POST /api/chat`
 - `POST /api/research`
@@ -515,6 +544,12 @@ Routing behavior:
 - Character-style questions go to a Character Agent.
 - Meta/story questions go to the Director Agent.
 - External-context questions go through the Research Agent placeholder, then Director Agent.
+
+Live character-chat notes:
+
+- When `ENABLE_LIVE_CHARACTER_CHAT=true`, `/api/character/new` and character-routed `/api/chat` use `CHARACTER_CHAT_MODEL_ID`.
+- The current fast-path recommendation is `global.anthropic.claude-haiku-4-5-20251001-v1:0`.
+- If the live Bedrock call fails, the backend falls back to the deterministic template response.
 
 ### `POST /api/research`
 

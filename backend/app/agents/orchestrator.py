@@ -7,6 +7,7 @@ from app.agents.character_agent import CharacterAgent
 from app.agents.director_agent import DirectorAgent
 from app.agents.memory_agent import MemoryAgent
 from app.agents.research_agent import ResearchAgent
+from app.config import Settings
 from app.models.schemas import AgentTraceStep, ChatResponse, RespondingAgent, Scene
 
 
@@ -17,8 +18,8 @@ class OrchestrationResult:
 
 
 class OrchestratorAgent:
-    def __init__(self, research_agent: ResearchAgent | None = None) -> None:
-        self.character_agent = CharacterAgent()
+    def __init__(self, settings: Settings, research_agent: ResearchAgent | None = None) -> None:
+        self.character_agent = CharacterAgent(settings=settings)
         self.director_agent = DirectorAgent()
         self.memory_agent = MemoryAgent()
         self.research_agent = research_agent or ResearchAgent()
