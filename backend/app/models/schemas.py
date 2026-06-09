@@ -142,6 +142,19 @@ class CreateVideoLinkRequest(BaseModel):
     sourceType: Literal["youtube", "external_url"] = "youtube"
 
 
+class UpdateVideoRequest(BaseModel):
+    title: Optional[str] = None
+    sourceType: Optional[Literal["upload", "youtube", "external_url"]] = None
+    originalUrl: Optional[str] = None
+    playbackUrl: Optional[str] = None
+    status: Optional[str] = None
+
+
+class DeleteVideoResponse(BaseModel):
+    deleted: bool
+    videoId: str
+
+
 class AnalyzeSceneRequest(BaseModel):
     frame: Optional[str] = None
     timestamp: float = Field(ge=0)

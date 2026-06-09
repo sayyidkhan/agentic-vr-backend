@@ -268,9 +268,27 @@ def test_scene_chat_research_checkout_flow():
             assert fetched_video.status_code == 200
             assert fetched_video.json()["title"] == "Uploaded Demo Clip"
 
+            updated_video = client.patch(
+                f"/api/admin/videos/{uploaded_video_data['videoId']}",
+                json={
+                    "title": "Updated Demo Clip",
+                    "status": "draft",
+                },
+            )
+            assert updated_video.status_code == 200
+            assert updated_video.json()["title"] == "Updated Demo Clip"
+            assert updated_video.json()["status"] == "draft"
+
             video_rows = client.get("/api/db/videos", params={"limit": 2})
             assert video_rows.status_code == 200
             assert video_rows.json()["rowCount"] >= initial_video_count + 2
+
+            deleted_video = client.delete(f"/api/admin/videos/{linked_video_data['videoId']}")
+            assert deleted_video.status_code == 200
+            assert deleted_video.json() == {"deleted": True, "videoId": linked_video_data["videoId"]}
+
+            deleted_video_lookup = client.get(f"/api/videos/{linked_video_data['videoId']}")
+            assert deleted_video_lookup.status_code == 404
 
             analyze = client.post(
                 "/api/scenes/analyze",

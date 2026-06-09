@@ -86,6 +86,14 @@ Verified live endpoints:
 - `GET /health`
 - `GET /health/db`
 - `POST /api/scenes/analyze`
+- `GET /api/videos`
+- `PATCH /api/admin/videos/{video_id}`
+- `DELETE /api/admin/videos/{video_id}`
+
+Admin endpoint note:
+
+- The `/api/admin/videos/*` endpoints are MVP catalogue operations for the frontend admin table.
+- There is no auth layer yet, so do not expose or deploy admin write/delete operations as production-safe controls until auth is added.
 
 Note: this EC2 instance now has an Elastic IP attached, so the public URL is stable across stop/start cycles.
 

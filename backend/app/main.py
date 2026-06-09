@@ -28,6 +28,7 @@ from app.models.schemas import (
     CheckoutRequest,
     CheckoutResponse,
     DatabaseHealthResponse,
+    DeleteVideoResponse,
     EnabledModelResponse,
     ModelCatalogResponse,
     ModelProbeBatchResponse,
@@ -41,6 +42,7 @@ from app.models.schemas import (
     NewCharacterSessionResponse,
     ResearchRequest,
     ResearchResponse,
+    UpdateVideoRequest,
 )
 from app.services.bedrock_runtime import BedrockRuntimeService
 from app.services.checkout import CheckoutError, CheckoutService, StripeWebhookError
@@ -276,6 +278,22 @@ def upload_video(
         content_type=stored_video.content_type,
         file_size_bytes=stored_video.file_size_bytes,
     )
+
+
+@app.patch("/api/admin/videos/{video_id}", response_model=VideoAsset)
+def update_admin_video(video_id: str, payload: UpdateVideoRequest, db: Session = Depends(get_db)) -> VideoAsset:
+    video = SQLiteStore(db).update_video(video_id, payload.model_dump(exclude_unset=True))
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return video
+
+
+@app.delete("/api/admin/videos/{video_id}", response_model=DeleteVideoResponse)
+def delete_admin_video(video_id: str, db: Session = Depends(get_db)) -> DeleteVideoResponse:
+    deleted = SQLiteStore(db).delete_video(video_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return DeleteVideoResponse(deleted=True, videoId=video_id)
 
 
 @app.post("/api/scenes/analyze", response_model=AnalyzeSceneResponse)

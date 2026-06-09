@@ -187,6 +187,42 @@ class SQLiteStore:
             return None
         return self._video_asset_from_record(record)
 
+    def update_video(self, video_id: str, changes: dict[str, object]) -> VideoAsset | None:
+        record = self.db.get(VideoRecord, video_id)
+        if record is None:
+            return None
+
+        if "title" in changes:
+            record.title = self._empty_string_to_none(changes["title"])
+        if "sourceType" in changes and changes["sourceType"] is not None:
+            record.source_type = str(changes["sourceType"])
+        if "originalUrl" in changes:
+            record.original_url = self._empty_string_to_none(changes["originalUrl"])
+        if "playbackUrl" in changes:
+            record.playback_url = self._empty_string_to_none(changes["playbackUrl"])
+        if "status" in changes and changes["status"] is not None:
+            record.status = str(changes["status"]).strip() or "ready"
+
+        self.db.commit()
+        self.db.refresh(record)
+        return self._video_asset_from_record(record)
+
+    def delete_video(self, video_id: str) -> bool:
+        record = self.db.get(VideoRecord, video_id)
+        if record is None:
+            return False
+
+        self.db.delete(record)
+        self.db.commit()
+        return True
+
+    @staticmethod
+    def _empty_string_to_none(value: object) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
     @staticmethod
     def _video_asset_from_record(record: VideoRecord) -> VideoAsset:
         return VideoAsset(
