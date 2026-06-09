@@ -13,7 +13,9 @@ def test_scene_chat_research_checkout_flow():
     original_model_runtime = app_main.model_runtime
     original_research_agent = app_main.research_agent
     original_scene_parser = app_main.scene_parser
+    original_checkout_service = app_main.checkout_service
     original_orchestrator_research_agent = app_main.orchestrator.research_agent
+    original_media_storage_backend = app_main.settings.media_storage_backend
 
     class StubBedrockRuntime:
         def probe(self, prompt: str):
@@ -118,6 +120,13 @@ def test_scene_chat_research_checkout_flow():
                 recommendedContext=f"Use external context only in Director Agent responses for query: {query}",
             )
 
+    class StubCheckoutService:
+        def create_checkout(self, payload):
+            return app_main.CheckoutResponse(
+                checkoutUrl=f"{app_main.settings.frontend_url}/unlock/simulated?sceneId={payload.sceneId}",
+                mode="simulated",
+            )
+
     class StubSceneParser:
         def analyze(self, payload):
             scene_id = f"scene_stub_{uuid.uuid4().hex[:8]}"
@@ -181,7 +190,9 @@ def test_scene_chat_research_checkout_flow():
         app_main.model_runtime = StubModelRuntime()
         app_main.research_agent = StubResearchAgent()
         app_main.scene_parser = StubSceneParser()
+        app_main.checkout_service = StubCheckoutService()
         app_main.orchestrator.research_agent = StubResearchAgent()
+        app_main.settings.media_storage_backend = "local"
 
         with TestClient(app) as client:
             health = client.get("/health")
@@ -338,4 +349,6 @@ def test_scene_chat_research_checkout_flow():
         app_main.model_runtime = original_model_runtime
         app_main.research_agent = original_research_agent
         app_main.scene_parser = original_scene_parser
+        app_main.checkout_service = original_checkout_service
         app_main.orchestrator.research_agent = original_orchestrator_research_agent
+        app_main.settings.media_storage_backend = original_media_storage_backend

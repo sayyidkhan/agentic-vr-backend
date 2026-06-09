@@ -161,6 +161,8 @@ OPENAI_API_KEY=
 EXA_API_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
+STRIPE_CURRENCY=sgd
+STRIPE_UNLOCK_AMOUNT_CENTS=500
 AWS_BEARER_TOKEN_BEDROCK=
 ```
 
@@ -168,6 +170,8 @@ Current behavior:
 
 - `OPENAI_API_KEY` is only needed if you later add OpenAI-hosted models back into the registry.
 - `EXA_API_KEY` is used by live scene-analysis character enrichment and `/api/research`.
+- `STRIPE_SECRET_KEY` enables Stripe Checkout Sessions for `/api/checkout`.
+- `STRIPE_WEBHOOK_SECRET` verifies signed events sent to `/api/webhooks/stripe`.
 - Empty Stripe keys return a simulated unlock URL.
 - `MODEL_REGISTRY_PATH` points to the enabled multi-model config file.
 - `ENABLE_LIVE_SCENE_ANALYSIS=true` turns on Bedrock vision parsing for `/api/scenes/analyze`.
@@ -796,7 +800,7 @@ AWS_GITHUB_ACTIONS_ROLE_ARN=<printed role arn>
 
 - Scene analysis uses fallback JSON, not a real vision LLM yet.
 - Research Agent returns an Exa placeholder.
-- Stripe Checkout is simulated unless `STRIPE_SECRET_KEY` integration is implemented.
+- Stripe Checkout uses hosted Checkout Sessions when `STRIPE_SECRET_KEY` is configured; otherwise it falls back to simulated unlock URLs.
 - Memory is persisted in SQLite but summarized with deterministic logic.
 - No auth, no user profiles, no creator upload flow.
 
@@ -807,7 +811,7 @@ Recommended order:
 1. Wire OpenAI multimodal scene parsing in `agents/scene_parser.py`.
 2. Add strict Pydantic validation for model-generated scene JSON.
 3. Wire Exa in `agents/research_agent.py`.
-4. Add real Stripe Checkout in `services/checkout.py`.
+4. Persist completed Stripe checkout sessions into an unlock/entitlement table.
 5. Replace or augment SQLite with DynamoDB/RDS for deployed persistence.
 6. Add request logging and basic rate limiting.
 7. Add frontend CORS origin once the deployed frontend URL is known.

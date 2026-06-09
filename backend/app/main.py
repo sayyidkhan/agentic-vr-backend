@@ -5,7 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import MetaData, Table, func, inspect, select, text
@@ -43,7 +43,7 @@ from app.models.schemas import (
     ResearchResponse,
 )
 from app.services.bedrock_runtime import BedrockRuntimeService
-from app.services.checkout import CheckoutService
+from app.services.checkout import CheckoutError, CheckoutService, StripeWebhookError
 from app.services.model_runtime import ModelRuntimeService
 from app.services.openai_realtime import OpenAIRealtimeError, OpenAIRealtimeService
 from app.services.video_storage import VideoStorageService
@@ -345,4 +345,22 @@ def checkout(payload: CheckoutRequest, db: Session = Depends(get_db)) -> Checkou
     if scene is None:
         raise HTTPException(status_code=404, detail="Scene not found")
 
-    return checkout_service.create_checkout(payload)
+    try:
+        return checkout_service.create_checkout(payload)
+    except CheckoutError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/webhooks/stripe")
+async def stripe_webhook(request: Request) -> dict[str, str | bool]:
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature")
+
+    try:
+        event = checkout_service.construct_webhook_event(payload=payload, signature=signature)
+    except CheckoutError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except StripeWebhookError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"received": True, "eventType": event.get("type", "unknown")}
