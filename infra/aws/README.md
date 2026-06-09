@@ -37,6 +37,21 @@ FRONTEND_URL=http://localhost:5173
 CORS_ORIGINS=*
 ```
 
+Runtime-secret sync:
+
+- The container now reads a persisted host env file at `/opt/sceneverse-config/shared.env`.
+- Sync your local backend env to EC2 with:
+
+```bash
+ENABLE_LIVE_SCENE_ANALYSIS=true ENABLE_EXA_CHARACTER_ENRICHMENT=true ./infra/aws/sync-ec2-env.sh
+```
+
+- Then redeploy:
+
+```bash
+./infra/aws/deploy-ec2-sync.sh
+```
+
 ## First-Time SSH Setup
 
 The deploy script does not require local AWS CLI access. It does require working SSH access from your machine to the EC2 instance.
@@ -166,8 +181,8 @@ PUBLIC_BASE_URL=http://18.207.53.115 \
 What the script does:
 
 - rsyncs the current local repo state to the EC2 instance
-- preserves `/opt/sceneverse/.git`
 - preserves SQLite at `/opt/sceneverse-data/sceneverse.db`
+- reads runtime secrets from `/opt/sceneverse-config/shared.env`
 - rebuilds the Docker image on-instance
 - restarts the `sceneverse-backend` container
 - smoke tests `GET /health` and `GET /health/db`
@@ -176,8 +191,8 @@ Important behavior:
 
 - It deploys your current local working tree, including uncommitted changes.
 - It does not run `git pull` on the instance.
-- It preserves `/opt/sceneverse/.git` so the remote host remains a git checkout.
 - It preserves `/opt/sceneverse-data/sceneverse.db` so SQLite survives container restarts.
+- It does not sync secrets automatically from your shell; use `./infra/aws/sync-ec2-env.sh` first when runtime keys change.
 
 Post-deploy smoke test:
 

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     bedrock_api_key: Optional[str] = Field(default=None, alias="AWS_BEARER_TOKEN_BEDROCK")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     model_registry_path: str = Field(default="app/data/enabled_models.json", alias="MODEL_REGISTRY_PATH")
+    enable_live_scene_analysis: bool = Field(default=False, alias="ENABLE_LIVE_SCENE_ANALYSIS")
+    scene_analysis_model_id: str = Field(default="global.anthropic.claude-sonnet-4-6", alias="SCENE_ANALYSIS_MODEL_ID")
+    enable_exa_character_enrichment: bool = Field(default=True, alias="ENABLE_EXA_CHARACTER_ENRICHMENT")
+    scene_analysis_max_characters: int = Field(default=4, alias="SCENE_ANALYSIS_MAX_CHARACTERS")
     exa_api_key: Optional[str] = Field(default=None, alias="EXA_API_KEY")
     stripe_secret_key: Optional[str] = Field(default=None, alias="STRIPE_SECRET_KEY")
 

@@ -9,6 +9,7 @@ from sqlalchemy import MetaData, Table, func, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.agents.orchestrator import OrchestratorAgent
+from app.agents.research_agent import ResearchAgent
 from app.agents.scene_parser import SceneParserAgent
 from app.config import get_settings
 from app.database import MANAGED_TABLES, get_db, init_db
@@ -57,8 +58,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-scene_parser = SceneParserAgent()
-orchestrator = OrchestratorAgent()
+research_agent = ResearchAgent(settings=settings)
+scene_parser = SceneParserAgent(settings=settings)
+orchestrator = OrchestratorAgent(research_agent=research_agent)
 bedrock_runtime = BedrockRuntimeService(settings=settings)
 model_runtime = ModelRuntimeService(settings=settings)
 checkout_service = CheckoutService(settings=settings)
@@ -269,7 +271,7 @@ def research(payload: ResearchRequest, db: Session = Depends(get_db)) -> Researc
     if scene is None:
         raise HTTPException(status_code=404, detail="Scene not found")
 
-    result = orchestrator.research_agent.search(payload.query)
+    result = research_agent.search(payload.query)
     store.save_research(payload.sceneId, payload.query, result.summary)
     return result
 

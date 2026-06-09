@@ -1,0 +1,58 @@
+[
+  {
+    "slug": "star_wars",
+    "title": "Star Wars (1977)",
+    "sourcePageUrl": "https://i.redd.it/what-in-your-opinion-is-the-most-important-influential-v0-6rkbhajgpd7e1.jpg?width=1280&format=pjpg&auto=webp&s=830b3cd907d8fc71a31e27a2694ed8c096a77d8f",
+    "imageUrl": "https://i.redd.it/what-in-your-opinion-is-the-most-important-influential-v0-6rkbhajgpd7e1.jpg?width=1280&format=pjpg&auto=webp&s=830b3cd907d8fc71a31e27a2694ed8c096a77d8f",
+    "fileName": "star_wars.jpg",
+    "timestamp": 142.0,
+    "transcriptSegment": "The rebels are cornered, but the fight is not over yet.",
+    "videoMetadata": {
+      "videoId": "fixture-star-wars-1977",
+      "title": "Star Wars poster fixture",
+      "source": "wikipedia"
+    }
+  },
+  {
+    "slug": "matrix",
+    "title": "The Matrix (1999)",
+    "sourcePageUrl": "https://static0.srcdn.com/wordpress/wp-content/uploads/2020/07/Laurence-Fishburne-as-Morpheus-and-Keanu-Reeves-as-Neo-in-The-Matrix.jpg",
+    "imageUrl": "https://static0.srcdn.com/wordpress/wp-content/uploads/2020/07/Laurence-Fishburne-as-Morpheus-and-Keanu-Reeves-as-Neo-in-The-Matrix.jpg",
+    "fileName": "matrix.jpg",
+    "timestamp": 318.5,
+    "transcriptSegment": "There is no safe route left. We improvise or we die.",
+    "videoMetadata": {
+      "videoId": "fixture-matrix-1999",
+      "title": "The Matrix poster fixture",
+      "source": "wikipedia"
+    }
+  },
+  {
+    "slug": "inception",
+    "title": "Inception (2010)",
+    "sourcePageUrl": "https://i.ytimg.com/vi/ldn4JkJsBsE/maxresdefault.jpg",
+    "imageUrl": "https://i.ytimg.com/vi/ldn4JkJsBsE/maxresdefault.jpg",
+    "fileName": "inception.jpg",
+    "timestamp": 451.25,
+    "transcriptSegment": "If the dream collapses now, none of us wake up clean.",
+    "videoMetadata": {
+      "videoId": "fixture-inception-2010",
+      "title": "Inception poster fixture",
+      "source": "wikipedia"
+    }
+  },
+  {
+    "slug": "titanic",
+    "title": "Titanic (1997)",
+    "sourcePageUrl": "https://i.ytimg.com/vi/btp8VHiSKZE/maxresdefault.jpg",
+    "imageUrl": "https://i.ytimg.com/vi/btp8VHiSKZE/maxresdefault.jpg",
+    "fileName": "titanic.jpg",
+    "timestamp": 522.75,
+    "transcriptSegment": "The promise feels impossible now, but neither of them lets go.",
+    "videoMetadata": {
+      "videoId": "fixture-titanic-1997",
+      "title": "Titanic poster fixture",
+      "source": "wikipedia"
+    }
+  }
+]

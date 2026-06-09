@@ -17,11 +17,11 @@ class OrchestrationResult:
 
 
 class OrchestratorAgent:
-    def __init__(self) -> None:
+    def __init__(self, research_agent: ResearchAgent | None = None) -> None:
         self.character_agent = CharacterAgent()
         self.director_agent = DirectorAgent()
         self.memory_agent = MemoryAgent()
-        self.research_agent = ResearchAgent()
+        self.research_agent = research_agent or ResearchAgent()
 
     def respond(self, scene: Scene, message: str, target_agent_id: Optional[str]) -> OrchestrationResult:
         trace = [

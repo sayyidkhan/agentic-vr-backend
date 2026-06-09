@@ -8,15 +8,15 @@ The backend is intentionally scoped for a hackathon MVP:
 pause video -> analyze scene -> create agents -> chat with memory -> show orchestration trace
 ```
 
-It currently uses deterministic fallback agents and SQLite so the product loop can be tested before wiring paid or external services.
+It currently uses SQLite for MVP persistence, with optional live Bedrock scene analysis and Exa-backed research/profile enrichment.
 
 ## What This Backend Does
 
 - Accepts a paused frame, timestamp, transcript segment, and video metadata.
-- Generates a structured scene context with fallback demo data.
+- Generates a structured scene context from a paused frame.
 - Creates character cards with goals, emotional state, and knowledge boundaries.
 - Routes chat through a lightweight orchestrator.
-- Supports Character Agent, Director Agent, Memory Agent, and placeholder Research Agent flows.
+- Supports Character Agent, Director Agent, Memory Agent, and Exa-backed Research Agent flows.
 - Persists scene state, characters, conversation turns, and research summaries in SQLite.
 - Returns `agentTrace` arrays so the frontend can show visible multi-agent coordination.
 - Provides a simulated Stripe unlock path until real Stripe Checkout is wired.
@@ -140,6 +140,10 @@ FRONTEND_URL=http://localhost:5173
 BEDROCK_REGION=us-east-1
 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
 MODEL_REGISTRY_PATH=app/data/enabled_models.json
+ENABLE_LIVE_SCENE_ANALYSIS=false
+SCENE_ANALYSIS_MODEL_ID=global.anthropic.claude-sonnet-4-6
+ENABLE_EXA_CHARACTER_ENRICHMENT=true
+SCENE_ANALYSIS_MAX_CHARACTERS=4
 
 OPENAI_API_KEY=
 EXA_API_KEY=
@@ -151,9 +155,11 @@ AWS_BEARER_TOKEN_BEDROCK=
 Current behavior:
 
 - `OPENAI_API_KEY` is only needed if you later add OpenAI-hosted models back into the registry.
-- `EXA_API_KEY` is not used yet.
+- `EXA_API_KEY` is used by live scene-analysis character enrichment and `/api/research`.
 - Empty Stripe keys return a simulated unlock URL.
 - `MODEL_REGISTRY_PATH` points to the enabled multi-model config file.
+- `ENABLE_LIVE_SCENE_ANALYSIS=true` turns on Bedrock vision parsing for `/api/scenes/analyze`.
+- `SCENE_ANALYSIS_MODEL_ID` controls the Bedrock vision model used for scene parsing.
 
 Current enabled Bedrock model registry:
 
@@ -203,6 +209,43 @@ The smoke test covers:
 - `POST /api/chat`
 - `POST /api/research`
 - `POST /api/checkout`
+
+Movie fixture tests:
+
+- Fixture manifest: [`tests/fixtures/movie_scene_cases.json`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/tests/fixtures/movie_scene_cases.json)
+- Local image cache dir: `tests/fixtures/movie_images/`
+- Downloader: [`scripts/download_movie_scene_fixtures.py`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/scripts/download_movie_scene_fixtures.py)
+- Parametrized test: [`tests/test_scene_movie_cases.py`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/tests/test_scene_movie_cases.py)
+- Live smoke runner: [`scripts/run_movie_scene_fixture_smoke.py`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/scripts/run_movie_scene_fixture_smoke.py)
+
+Download the four movie scene fixtures:
+
+```bash
+cd backend
+python scripts/download_movie_scene_fixtures.py
+```
+
+Run the fixture regression test:
+
+```bash
+cd backend
+source .venv/bin/activate
+pytest tests/test_scene_movie_cases.py
+```
+
+Current behavior of the movie fixture suite:
+
+- With `ENABLE_LIVE_SCENE_ANALYSIS=false`, the API intentionally falls back to deterministic demo parsing.
+- With `ENABLE_LIVE_SCENE_ANALYSIS=true`, the same fixture set becomes a real Bedrock vision smoke test.
+- If `EXA_API_KEY` is also present, character profile summaries and citations are attached to the analysis response.
+
+Run the same fixture set against a live backend:
+
+```bash
+cd backend
+python scripts/run_movie_scene_fixture_smoke.py --base-url http://127.0.0.1:8000
+python scripts/run_movie_scene_fixture_smoke.py --base-url http://18.207.53.115
+```
 
 ## API Endpoints
 
@@ -442,6 +485,14 @@ Response includes:
 - `directorContext`
 - `memorySummary`
 - `agentTrace`
+- `analysisMode`
+- `sourceModelId`
+
+Live scene-analysis notes:
+
+- The default safe mode is fallback unless `ENABLE_LIVE_SCENE_ANALYSIS=true`.
+- The live path uses Bedrock Converse image input through [`app/services/scene_analysis.py`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/app/services/scene_analysis.py).
+- Character profile enrichment uses Exa through [`app/services/exa_service.py`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/app/services/exa_service.py).
 
 ### `POST /api/chat`
 

@@ -17,14 +17,15 @@ Avoid building VR, marketplace, auth, upload flows, or complex persistence until
 | Frontend | Next.js + React + TypeScript | Fast Vercel deployment, strong UI ergonomics, easy API integration |
 | Styling | Tailwind CSS + shadcn/ui | Quick polished UI for panels, cards, tabs, dialogs, buttons |
 | Video | Native HTML5 video | Enough for controlled clip playback, pause, timestamp, and frame capture |
-| Backend | FastAPI on AWS Lambda or AWS App Runner | Python is strong for agent orchestration and API speed |
-| LLM / Vision | OpenAI multimodal model or equivalent vision-capable LLM | Scene parsing needs frame + transcript reasoning |
-| Agent Orchestration | Lightweight custom orchestrator first | More demo control than adopting a heavy framework too early |
-| External Search | Exa API | Required sponsor-aligned research context |
-| Memory | In-memory store for MVP; DynamoDB after demo | Keeps MVP simple while leaving a clean persistence path |
-| Frame Storage | Base64 payload for MVP; S3 after demo | Avoid S3 setup until frame persistence matters |
+| Video Storage | Amazon S3 with presigned upload/download URLs | Simple, durable storage for source videos without keeping large files on EC2 |
+| Backend | FastAPI on EC2 | Simple deployment model, fast iteration, and full control during prototyping |
+| LLM / Vision | Claude for scene analysis | Strong frame + transcript reasoning for structured scene extraction |
+| Agent Orchestration | Amazon Bedrock + lightweight custom orchestrator | Keeps the agentic layer on AWS while preserving demo control |
+| Character Data Enrichment | Exa API | Useful for enriching character context with external references |
+| Memory / Persistence | SQLite for rapid prototyping; AWS PostgreSQL later | Minimal setup now, cleaner migration path once the product stabilizes |
+| Frame Storage | Base64 payload for MVP; S3 for persisted captures later | Keep scene analysis simple now while leaving a path for saved frame assets |
 | Payments | Stripe Checkout test mode | Optional premium unlock demo with low implementation burden |
-| Deployment | Vercel frontend + AWS backend | Matches PRD and hackathon sponsor alignment |
+| Deployment | Vercel frontend + EC2 backend | Fastest path to a working demo with AWS-hosted backend control |
 
 ## Repo Shape
 
@@ -53,11 +54,13 @@ agentic-vr/
         scene.py
         chat.py
       services/
-        llm.py
+        bedrock.py
+        claude_scene_analysis.py
         exa.py
+        s3.py
         stripe.py
       store/
-        memory.py
+        sqlite.py
     requirements.txt
   docs/
     prd.md
@@ -91,7 +94,7 @@ ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
 const frameDataUrl = canvas.toDataURL("image/jpeg", 0.82);
 ```
 
-For demo reliability, ship a local demo video and transcript in `frontend/public`. Do not depend on third-party streaming or copyrighted footage.
+For demo reliability, you can still ship one local demo video and transcript in `frontend/public`. But if users need uploaded or reusable video assets, store the video files in S3 and stream them into the player using controlled URLs.
 
 ## Backend Implementation
 
@@ -107,11 +110,12 @@ POST /api/checkout
 MVP backend responsibilities:
 
 - Accept captured frame, timestamp, transcript segment, and video metadata.
-- Ask the Scene Parser Agent to produce structured scene JSON.
-- Initialize scene state in memory.
+- Issue presigned S3 URLs for video upload and retrieval when the product moves beyond one local demo clip.
+- Ask the Scene Parser Agent to produce structured scene JSON using Claude.
+- Persist scene and conversation state in SQLite.
 - Route chat messages through the Orchestrator Agent.
 - Return agent traces so the UI can show real coordination.
-- Fall back to cached demo scene data if LLM, Exa, or Stripe fails.
+- Fall back to cached demo scene data if Claude, Bedrock, Exa, or Stripe fails.
 
 ## Agent Design
 
@@ -136,7 +140,7 @@ Output:
 - Character definitions
 - Director context
 
-For MVP, require structured JSON from the model and validate it with Pydantic.
+Use Claude for this step and require structured JSON output validated with Pydantic.
 
 ### Orchestrator Agent
 
@@ -172,13 +176,14 @@ Each character should receive:
 
 - Scene facts
 - Character card
+- Exa-enriched supporting context
 - Knowledge boundaries
 - Conversation memory
 - User question
 
 Hard rule:
 
-Character agents should not use Exa/public research unless that information is plausible in-world knowledge.
+Use Exa to enrich the character definition layer before conversation starts, but keep live character responses constrained to plausible in-world knowledge.
 
 ### Director Agent
 
@@ -194,7 +199,7 @@ The Director can use scene context, memory, and summarized Exa research.
 
 ### Memory Agent
 
-For MVP, memory can be a Python dictionary keyed by `sceneId`.
+For MVP, persist memory in SQLite keyed by `sceneId`.
 
 Store:
 
@@ -207,7 +212,7 @@ After every chat turn, update the memory summary. Do not store unlimited full co
 
 ### Research Agent
 
-Use Exa only when the orchestrator detects external context intent.
+Use Exa both for selective character enrichment and for external-context research when the orchestrator detects that intent.
 
 Examples:
 
@@ -215,7 +220,7 @@ Examples:
 - "What genre is this scene similar to?"
 - "What cinematic references does this remind you of?"
 
-Keep Exa output separate from character knowledge. Feed it mainly to the Director Agent.
+Keep raw Exa output separate from character knowledge. For characters, only pass filtered enrichment that fits the world of the scene. For broader analysis, feed Exa output mainly to the Director Agent.
 
 ## Data Contracts
 
@@ -268,6 +273,7 @@ type ChatResponse = {
 - Pick one royalty-free or AI-generated cinematic clip.
 - Create a transcript JSON with timestamps.
 - Create one cached fallback scene analysis JSON.
+- If you want reusable uploaded assets, add an S3 bucket and presigned upload flow early.
 
 This is the biggest demo-risk reducer.
 
@@ -278,27 +284,29 @@ This is the biggest demo-risk reducer.
 - Frame capture.
 - Generate button.
 - Static mocked scene panel and character cards.
+- If uploads are enabled, add a simple upload flow that stores the source file in S3.
 
 Do this before backend AI integration so the product shape is clear early.
 
 ### Step 3: Backend Scene Analysis
 
+- Implement video upload/retrieval endpoints or presigned URL helpers for S3.
 - Implement `POST /api/scenes/analyze`.
 - Accept frame and transcript.
-- Return structured scene JSON.
+- Run Claude scene analysis and return structured scene JSON.
 - If model fails, return cached fallback JSON.
 
 ### Step 4: Chat Orchestration
 
 - Implement `POST /api/chat`.
-- Route between selected Character Agent and Director Agent.
-- Add memory summary.
+- Route between selected Character Agent and Director Agent through Bedrock-backed orchestration.
+- Read and update SQLite-backed memory summary.
 - Return agent trace.
 
 ### Step 5: Exa Research
 
-- Implement Research Agent.
-- Add one visible UI path where Exa improves a Director response.
+- Implement Research Agent and character enrichment flow.
+- Add one visible UI path where Exa improves a Director response or deepens a character card.
 - Make failure non-blocking.
 
 ### Step 6: Stripe Demo
@@ -314,14 +322,19 @@ Frontend:
 
 ```text
 NEXT_PUBLIC_API_BASE_URL=
+NEXT_PUBLIC_S3_VIDEO_BASE_URL=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
 ```
 
 Backend:
 
 ```text
-OPENAI_API_KEY=
+AWS_REGION=
+BEDROCK_MODEL_ID=
+CLAUDE_SCENE_MODEL_ID=
 EXA_API_KEY=
+S3_VIDEO_BUCKET=
+SQLITE_DB_PATH=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 FRONTEND_URL=
@@ -331,41 +344,44 @@ FRONTEND_URL=
 
 ### Fastest Reasonable Option
 
-Use AWS App Runner for the FastAPI backend.
+Use EC2 for the FastAPI backend and keep SQLite on the instance during prototyping.
 
 Pros:
 
-- Simpler than Lambda packaging for Python dependencies.
-- Works well for a normal HTTP API.
-- Easier logs and environment variable setup.
+- Minimal platform complexity during a hackathon or early MVP.
+- Easy to run FastAPI, background jobs, and SQLite in one place.
+- S3 cleanly offloads large video objects from the EC2 instance.
+- Full control over Bedrock integration, caching, and agent orchestration.
 
 Cons:
 
-- Slightly less "serverless-native" than Lambda.
+- More infrastructure to manage than a fully managed runtime.
+- SQLite is fine for rapid prototyping, but not the long-term multi-user store.
 
-### More Serverless Option
+### Upgrade Path
 
-Use AWS Lambda + API Gateway.
+Move persistence from SQLite to AWS PostgreSQL when concurrent usage, analytics, or multi-tenant data starts to matter.
 
 Pros:
 
-- Strong sponsor alignment.
-- Cheap and scalable.
+- Better concurrency and durability.
+- Cleaner path for relational analytics, user state, and operations.
 
 Cons:
 
-- Packaging, cold starts, and binary dependencies can slow down hackathon execution.
+- More setup overhead than SQLite.
+- Not necessary until the product proves repeat usage.
 
 Recommendation:
 
-Use App Runner for speed unless the hackathon heavily rewards Lambda specifically.
+Stay on EC2 + SQLite for speed now. Upgrade to AWS PostgreSQL once prototyping speed is no longer the bottleneck.
 
 ## Production Path
 
 After the hackathon:
 
-- Move memory from in-memory store to DynamoDB.
-- Store captured frames in S3.
+- Move memory and session state from SQLite to AWS PostgreSQL.
+- Keep source videos in S3 and move persisted captured frames there as needed.
 - Add creator upload flow.
 - Add authentication with Clerk, Auth.js, or Cognito.
 - Add persistent scene links.
@@ -380,8 +396,8 @@ After the hackathon:
 | Scene analysis latency is too high | Use staged loading and cached fallback scene JSON |
 | Agents feel like one chatbot | Show agent trace and use visibly different prompts/roles |
 | Character responses leak external knowledge | Separate Character Agent context from Research Agent context |
-| Demo clip causes CORS/frame-capture issues | Host video locally from the frontend `public` folder |
-| Backend deployment takes too long | Use App Runner or even one temporary hosted API before optimizing |
+| Demo clip causes CORS/frame-capture issues | Use one local demo clip first, or serve uploaded videos from a controlled S3/CloudFront path with the correct CORS policy |
+| Backend deployment takes too long | Keep the backend on one EC2 service with SQLite before optimizing infrastructure |
 | Stripe distracts from core demo | Make Stripe optional and non-blocking |
 
 ## Recommended 36-Hour Target
@@ -399,4 +415,3 @@ Ship this minimum:
 - Optional Stripe test unlock.
 
 Do not spend time on VR until this loop is strong.
-

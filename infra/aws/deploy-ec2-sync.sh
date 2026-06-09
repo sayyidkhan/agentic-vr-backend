@@ -5,6 +5,7 @@ REMOTE_HOST="${REMOTE_HOST:-sceneverse-prod}"
 REMOTE_APP_DIR="${REMOTE_APP_DIR:-/opt/sceneverse}"
 REMOTE_STAGING_DIR="${REMOTE_STAGING_DIR:-/home/ec2-user/sceneverse-staging}"
 REMOTE_DATA_DIR="${REMOTE_DATA_DIR:-/opt/sceneverse-data}"
+REMOTE_ENV_FILE="${REMOTE_ENV_FILE:-/opt/sceneverse-config/shared.env}"
 REMOTE_CONTAINER_NAME="${REMOTE_CONTAINER_NAME:-sceneverse-backend}"
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-http://18.207.53.115}"
 
@@ -108,11 +109,15 @@ trap 'rm -f "$REMOTE_SCRIPT_FILE"' EXIT
   printf 'REMOTE_APP_DIR=%q\n' "$REMOTE_APP_DIR"
   printf 'REMOTE_STAGING_DIR=%q\n' "$REMOTE_STAGING_DIR"
   printf 'REMOTE_DATA_DIR=%q\n' "$REMOTE_DATA_DIR"
+  printf 'REMOTE_ENV_FILE=%q\n' "$REMOTE_ENV_FILE"
   printf 'REMOTE_CONTAINER_NAME=%q\n' "$REMOTE_CONTAINER_NAME"
   cat <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 sudo mkdir -p "$REMOTE_DATA_DIR"
+sudo mkdir -p "$(dirname "$REMOTE_ENV_FILE")"
+sudo touch "$REMOTE_ENV_FILE"
+sudo chmod 600 "$REMOTE_ENV_FILE"
 
 if sudo docker ps -a --format '{{.Names}}' | grep -qx "$REMOTE_CONTAINER_NAME" && [[ ! -f "$REMOTE_DATA_DIR/sceneverse.db" ]]; then
   sudo docker cp "${REMOTE_CONTAINER_NAME}:/app/data/sceneverse.db" "$REMOTE_DATA_DIR/sceneverse.db" || true
@@ -131,6 +136,7 @@ sudo docker run -d \
   --name "$REMOTE_CONTAINER_NAME" \
   -p 80:8000 \
   -v "$REMOTE_DATA_DIR:/app/data" \
+  --env-file "$REMOTE_ENV_FILE" \
   -e APP_NAME="$APP_NAME" \
   -e ENVIRONMENT="$ENVIRONMENT_NAME" \
   -e DATABASE_URL="$DATABASE_URL" \

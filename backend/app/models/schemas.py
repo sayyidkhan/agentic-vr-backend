@@ -103,6 +103,12 @@ class AnalyzeSceneRequest(BaseModel):
     videoMetadata: VideoMetadata = Field(default_factory=VideoMetadata)
 
 
+class CharacterProfileSource(BaseModel):
+    title: str
+    url: str
+    snippet: str
+
+
 class Character(BaseModel):
     characterId: str
     sceneId: str
@@ -113,6 +119,11 @@ class Character(BaseModel):
     goals: list[str]
     knowledgeBoundaries: list[str]
     speakingStyle: str
+    franchise: Optional[str] = None
+    portrayedBy: Optional[str] = None
+    identificationConfidence: Optional[float] = None
+    profileSummary: Optional[str] = None
+    profileSources: list[CharacterProfileSource] = Field(default_factory=list)
 
 
 class NewCharacterSessionRequest(BaseModel):
@@ -146,6 +157,9 @@ class Scene(BaseModel):
     directorContext: str
     memorySummary: str
     createdAt: Optional[datetime] = None
+    detectedWorkTitle: Optional[str] = None
+    detectedUniverse: Optional[str] = None
+    analysisMode: Optional[Literal["live", "fallback"]] = None
 
 
 class AgentTraceStep(BaseModel):
@@ -163,6 +177,8 @@ class AnalyzeSceneResponse(BaseModel):
     directorContext: str
     memorySummary: str
     agentTrace: list[AgentTraceStep]
+    analysisMode: Literal["live", "fallback"]
+    sourceModelId: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
