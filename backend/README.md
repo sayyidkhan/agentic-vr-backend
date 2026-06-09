@@ -174,6 +174,7 @@ Current notes:
 - For deployed environments, prefer running `alembic upgrade head` during startup or deployment.
 - Keep schema changes SQLAlchemy-portable so the later move from SQLite to PostgreSQL stays cheap.
 - Existing local SQLite files created before Alembic was added are stamped to the initial revision on next app startup.
+- Current schema reference: [`docs/db/SCHEMA.md`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/docs/db/SCHEMA.md)
 
 ## Run Tests
 
@@ -223,6 +224,30 @@ Response includes:
 - `quickCheck`
 - `journalMode`
 - `schemaRevision`
+
+### `GET /api/db/{table_name}`
+
+Read-only debug endpoint for inspecting DB rows without SSH.
+
+Examples:
+
+```bash
+curl 'http://localhost:8000/api/db/scenes?limit=10'
+curl 'http://localhost:8000/api/db/conversation_turns?limit=10&offset=0'
+```
+
+Response includes:
+
+- `table`
+- `columns`
+- `limit`
+- `offset`
+- `rowCount`
+- `rows`
+
+Full schema and table details:
+
+- [`docs/db/SCHEMA.md`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/docs/db/SCHEMA.md)
 
 ### `POST /api/scenes/analyze`
 
