@@ -1,8 +1,10 @@
+from typing import Any
+
 from app.config import Settings
 from app.models.schemas import CheckoutRequest, CheckoutResponse
 
 
-STRIPE_API_VERSION = "2026-02-25.clover"
+STRIPE_API_VERSION = "2026-05-27.dahlia"
 
 
 class CheckoutError(RuntimeError):
@@ -67,7 +69,7 @@ class CheckoutService:
             mode="stripe",
         )
 
-    def construct_webhook_event(self, *, payload: bytes, signature: str | None) -> dict:
+    def construct_webhook_event(self, *, payload: bytes, signature: str | None) -> Any:
         if not self.settings.stripe_webhook_secret:
             raise CheckoutError("Stripe webhook secret is not configured.")
         if not signature:

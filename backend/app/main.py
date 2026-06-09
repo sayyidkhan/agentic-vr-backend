@@ -363,4 +363,5 @@ async def stripe_webhook(request: Request) -> dict[str, str | bool]:
     except StripeWebhookError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return {"received": True, "eventType": event.get("type", "unknown")}
+    event_type = event["type"] if isinstance(event, dict) else getattr(event, "type", "unknown")
+    return {"received": True, "eventType": event_type}
