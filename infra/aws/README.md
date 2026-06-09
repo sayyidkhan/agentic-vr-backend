@@ -31,8 +31,11 @@ Recommended environment variables:
 
 ```text
 APP_NAME=SceneVerse AI Backend
+SCENEVERSE_PROFILE=cloud
 ENVIRONMENT=prod
-DATABASE_URL=sqlite:///./data/sceneverse.db
+CLOUD_DATABASE_URL=sqlite:///./data/sceneverse.db
+CLOUD_S3_VIDEO_BUCKET=<video-bucket>
+CLOUD_MEDIA_STORAGE_PREFIX=videos
 FRONTEND_URL=http://localhost:5173
 CORS_ORIGINS=*
 ```

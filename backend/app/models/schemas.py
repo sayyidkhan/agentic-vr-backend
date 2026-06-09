@@ -16,6 +16,7 @@ class DatabaseHealthResponse(BaseModel):
     status: Literal["ok", "error"]
     database: str
     engine: str
+    environment: str
     databasePath: Optional[str] = None
     sqliteVersion: Optional[str] = None
     quickCheck: Optional[str] = None
@@ -117,6 +118,7 @@ class VideoAsset(BaseModel):
     videoId: str
     sourceType: Literal["upload", "youtube", "external_url"]
     title: Optional[str] = None
+    description: Optional[str] = None
     originalUrl: Optional[str] = None
     originalFilename: Optional[str] = None
     storageBackend: Optional[str] = None
@@ -139,14 +141,13 @@ class VideoListResponse(BaseModel):
 class CreateVideoLinkRequest(BaseModel):
     url: str = Field(min_length=1)
     title: Optional[str] = None
+    description: Optional[str] = None
     sourceType: Literal["youtube", "external_url"] = "youtube"
 
 
 class UpdateVideoRequest(BaseModel):
     title: Optional[str] = None
-    sourceType: Optional[Literal["upload", "youtube", "external_url"]] = None
-    originalUrl: Optional[str] = None
-    playbackUrl: Optional[str] = None
+    description: Optional[str] = None
     status: Optional[str] = None
 
 

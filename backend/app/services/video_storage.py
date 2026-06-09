@@ -21,6 +21,7 @@ class StoredVideo:
 
 class VideoStorageService:
     allowed_extensions = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
+    minimum_video_file_bytes = 1024
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -35,6 +36,9 @@ class VideoStorageService:
 
         content_type = upload.content_type or self._content_type_for_suffix(suffix)
         file_size_bytes = self._get_file_size(upload)
+        if file_size_bytes is not None and file_size_bytes < self.minimum_video_file_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded video file is too small to be playable")
+
         storage_key = self._build_storage_key(video_id=video_id, suffix=suffix)
 
         if self.settings.media_storage_backend == "s3":

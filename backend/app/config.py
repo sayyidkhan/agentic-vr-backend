@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = Field(default="SceneVerse AI Backend", alias="APP_NAME")
+    sceneverse_profile: str = Field(default="local", alias="SCENEVERSE_PROFILE")
     environment: str = Field(default="local", alias="ENVIRONMENT")
     database_url: str = Field(default="sqlite:///./data/sceneverse.db", alias="DATABASE_URL")
     cors_origins: str = Field(default="http://localhost:5173,http://localhost:3000", alias="CORS_ORIGINS")
@@ -53,8 +54,44 @@ class Settings(BaseSettings):
     media_storage_prefix: str = Field(default="videos", alias="MEDIA_STORAGE_PREFIX")
     s3_video_bucket: Optional[str] = Field(default=None, alias="S3_VIDEO_BUCKET")
     media_cdn_base_url: Optional[str] = Field(default=None, alias="MEDIA_CDN_BASE_URL")
+    local_database_url: Optional[str] = Field(default=None, alias="LOCAL_DATABASE_URL")
+    local_media_local_dir: Optional[str] = Field(default=None, alias="LOCAL_MEDIA_LOCAL_DIR")
+    local_media_public_path: Optional[str] = Field(default=None, alias="LOCAL_MEDIA_PUBLIC_PATH")
+    local_media_storage_prefix: Optional[str] = Field(default=None, alias="LOCAL_MEDIA_STORAGE_PREFIX")
+    cloud_database_url: Optional[str] = Field(default=None, alias="CLOUD_DATABASE_URL")
+    cloud_media_local_dir: Optional[str] = Field(default=None, alias="CLOUD_MEDIA_LOCAL_DIR")
+    cloud_media_public_path: Optional[str] = Field(default=None, alias="CLOUD_MEDIA_PUBLIC_PATH")
+    cloud_media_storage_prefix: Optional[str] = Field(default=None, alias="CLOUD_MEDIA_STORAGE_PREFIX")
+    cloud_s3_video_bucket: Optional[str] = Field(default=None, alias="CLOUD_S3_VIDEO_BUCKET")
+    cloud_media_cdn_base_url: Optional[str] = Field(default=None, alias="CLOUD_MEDIA_CDN_BASE_URL")
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
+
+    def model_post_init(self, __context: object) -> None:
+        profile = self.sceneverse_profile.strip().lower()
+        if profile not in {"local", "cloud"}:
+            raise ValueError("SCENEVERSE_PROFILE must be either 'local' or 'cloud'")
+
+        self.sceneverse_profile = profile
+        self.environment = profile
+
+        if profile == "cloud":
+            self.database_url = self.cloud_database_url or self.database_url
+            self.media_storage_backend = "s3"
+            self.media_local_dir = self.cloud_media_local_dir or self.media_local_dir
+            self.media_public_path = self.cloud_media_public_path or self.media_public_path
+            self.media_storage_prefix = self.cloud_media_storage_prefix or self.media_storage_prefix
+            self.s3_video_bucket = self.cloud_s3_video_bucket or self.s3_video_bucket
+            self.media_cdn_base_url = self.cloud_media_cdn_base_url or self.media_cdn_base_url
+            return
+
+        self.database_url = self.local_database_url or self.database_url
+        self.media_storage_backend = "local"
+        self.media_local_dir = self.local_media_local_dir or self.media_local_dir
+        self.media_public_path = self.local_media_public_path or self.media_public_path
+        self.media_storage_prefix = self.local_media_storage_prefix or self.media_storage_prefix
+        self.s3_video_bucket = None
+        self.media_cdn_base_url = None
 
     @property
     def cors_origin_list(self) -> list[str]:

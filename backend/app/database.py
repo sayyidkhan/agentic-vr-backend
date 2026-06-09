@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-CURRENT_SCHEMA_REVISION = "20260609_0003"
+CURRENT_SCHEMA_REVISION = "20260609_0004"
 MANAGED_TABLES = {"scenes", "characters", "conversation_turns", "research_contexts", "character_sessions", "videos"}
 
 if settings.database_url.startswith("sqlite:///"):
@@ -34,7 +34,26 @@ def init_db() -> None:
     # This keeps additive schema changes usable even before a full migration runner
     # is wired into the container startup path.
     Base.metadata.create_all(bind=engine)
+    _ensure_additive_schema()
     _stamp_current_revision()
+
+
+def _ensure_additive_schema() -> None:
+    inspector = inspect(engine)
+    if "videos" not in inspector.get_table_names():
+        return
+
+    video_columns = {column["name"] for column in inspector.get_columns("videos")}
+    statements = []
+    if "description" not in video_columns:
+        statements.append("ALTER TABLE videos ADD COLUMN description TEXT")
+
+    if not statements:
+        return
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
 
 
 def _stamp_current_revision() -> None:

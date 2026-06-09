@@ -49,7 +49,7 @@ from app.services.checkout import CheckoutError, CheckoutService, StripeWebhookE
 from app.services.model_runtime import ModelRuntimeService
 from app.services.openai_realtime import OpenAIRealtimeError, OpenAIRealtimeService
 from app.services.video_storage import VideoStorageService
-from app.store.sqlite_store import SQLiteStore
+from app.store.sqlite_store import DuplicateVideoReferenceError, SQLiteStore
 
 settings = get_settings()
 Path(settings.media_local_dir).mkdir(parents=True, exist_ok=True)
@@ -134,6 +134,7 @@ def database_health(db: Session = Depends(get_db)) -> DatabaseHealthResponse:
                 status="ok",
                 database=database,
                 engine="sqlalchemy",
+                environment=settings.environment,
                 schemaRevision=schema_revision,
                 tableCount=table_count,
             )
@@ -150,6 +151,7 @@ def database_health(db: Session = Depends(get_db)) -> DatabaseHealthResponse:
             status="ok",
             database="sqlite",
             engine="sqlalchemy",
+            environment=settings.environment,
             databasePath=resolved_database_path,
             sqliteVersion=sqlite_version,
             quickCheck=quick_check,
@@ -257,32 +259,58 @@ def get_video(video_id: str, db: Session = Depends(get_db)) -> VideoAsset:
 
 @app.post("/api/videos/link", response_model=VideoAsset, status_code=status.HTTP_201_CREATED)
 def create_video_link(payload: CreateVideoLinkRequest, db: Session = Depends(get_db)) -> VideoAsset:
-    return SQLiteStore(db).create_video_link(url=payload.url, source_type=payload.sourceType, title=payload.title)
+    try:
+        return SQLiteStore(db).create_video_link(
+            url=payload.url,
+            source_type=payload.sourceType,
+            title=payload.title,
+            description=payload.description,
+        )
+    except DuplicateVideoReferenceError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Video reference already exists as {error.video_id}",
+        ) from error
 
 
 @app.post("/api/videos/upload", response_model=VideoAsset, status_code=status.HTTP_201_CREATED)
 def upload_video(
     file: UploadFile = File(...),
     title: str | None = Form(default=None),
+    description: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ) -> VideoAsset:
     video_id = f"video_{uuid4().hex[:12]}"
     stored_video = VideoStorageService(settings).store_upload(file, video_id=video_id)
-    return SQLiteStore(db).create_uploaded_video(
-        video_id=video_id,
-        title=title,
-        original_filename=file.filename,
-        storage_backend=stored_video.storage_backend,
-        storage_key=stored_video.storage_key,
-        playback_url=stored_video.playback_url,
-        content_type=stored_video.content_type,
-        file_size_bytes=stored_video.file_size_bytes,
-    )
+    try:
+        return SQLiteStore(db).create_uploaded_video(
+            video_id=video_id,
+            title=title,
+            description=description,
+            original_filename=file.filename,
+            storage_backend=stored_video.storage_backend,
+            storage_key=stored_video.storage_key,
+            playback_url=stored_video.playback_url,
+            content_type=stored_video.content_type,
+            file_size_bytes=stored_video.file_size_bytes,
+        )
+    except DuplicateVideoReferenceError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Video reference already exists as {error.video_id}",
+        ) from error
 
 
 @app.patch("/api/admin/videos/{video_id}", response_model=VideoAsset)
 def update_admin_video(video_id: str, payload: UpdateVideoRequest, db: Session = Depends(get_db)) -> VideoAsset:
-    video = SQLiteStore(db).update_video(video_id, payload.model_dump(exclude_unset=True))
+    try:
+        video = SQLiteStore(db).update_video(video_id, payload.model_dump(exclude_unset=True))
+    except DuplicateVideoReferenceError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Video reference already exists as {error.video_id}",
+        ) from error
+
     if video is None:
         raise HTTPException(status_code=404, detail="Video not found")
     return video

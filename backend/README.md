@@ -106,6 +106,21 @@ pip install -r requirements-dev.txt
 cp .env.example .env
 ```
 
+The default profile is local:
+
+```env
+SCENEVERSE_PROFILE=local
+```
+
+That resolves to local SQLite and local media files. For ECS/cloud, switch the same key to `cloud`; the backend
+then resolves to ECS SQLite plus S3 media settings:
+
+```env
+SCENEVERSE_PROFILE=cloud
+CLOUD_DATABASE_URL=sqlite:///./data/sceneverse.db
+CLOUD_S3_VIDEO_BUCKET=<dev-or-prod-video-bucket>
+```
+
 Run the API:
 
 ```bash

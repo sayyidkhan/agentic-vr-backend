@@ -2,12 +2,66 @@ from __future__ import annotations
 
 import json
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from uuid import uuid4
 
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.db import CharacterRecord, CharacterSessionRecord, ConversationTurnRecord, ResearchContextRecord, SceneRecord, VideoRecord
 from app.models.schemas import Character, ChatResponse, Scene, VideoAsset
+
+
+class DuplicateVideoReferenceError(ValueError):
+    def __init__(self, video_id: str) -> None:
+        super().__init__(f"Duplicate video reference: {video_id}")
+        self.video_id = video_id
+
+
+def normalize_video_reference(value: object) -> str | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    parsed = urlparse(text)
+    hostname = (parsed.hostname or "").removeprefix("www.").lower()
+    youtube_id = _youtube_video_id(parsed, hostname)
+    if youtube_id:
+        return f"youtube:{youtube_id}"
+
+    path = parsed.path.rstrip("/") or parsed.path
+    query = urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
+
+    if parsed.scheme or parsed.netloc:
+        scheme = parsed.scheme.lower()
+        netloc = (parsed.netloc or "").lower()
+        return urlunparse((scheme, netloc, path, "", query, ""))
+
+    return urlunparse(("", "", path, "", query, ""))
+
+
+def _youtube_video_id(parsed_url, hostname: str) -> str | None:
+    if hostname == "youtu.be":
+        return parsed_url.path.strip("/").split("/")[0] or None
+
+    if (
+        hostname == "youtube.com"
+        or hostname.endswith(".youtube.com")
+        or hostname == "youtube-nocookie.com"
+        or hostname.endswith(".youtube-nocookie.com")
+    ):
+        if parsed_url.path == "/watch":
+            return dict(parse_qsl(parsed_url.query)).get("v")
+
+        parts = [part for part in parsed_url.path.split("/") if part]
+        for marker in ("embed", "shorts", "live"):
+            if marker in parts:
+                index = parts.index(marker)
+                return parts[index + 1] if index + 1 < len(parts) else None
+
+    return None
 
 
 class SQLiteStore:
@@ -133,11 +187,22 @@ class SQLiteStore:
         self.db.commit()
         return session_id
 
-    def create_video_link(self, url: str, source_type: str, title: str | None = None) -> VideoAsset:
+    def create_video_link(
+        self,
+        url: str,
+        source_type: str,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> VideoAsset:
+        duplicate = self.find_video_by_reference(url)
+        if duplicate is not None:
+            raise DuplicateVideoReferenceError(duplicate.videoId)
+
         record = VideoRecord(
             video_id=f"video_{uuid4().hex[:12]}",
             source_type=source_type,
             title=title,
+            description=description,
             original_url=url,
             status="ready",
         )
@@ -151,6 +216,7 @@ class SQLiteStore:
         *,
         video_id: str,
         title: str | None,
+        description: str | None,
         original_filename: str | None,
         storage_backend: str,
         storage_key: str,
@@ -158,10 +224,15 @@ class SQLiteStore:
         content_type: str | None,
         file_size_bytes: int | None,
     ) -> VideoAsset:
+        duplicate = self.find_video_by_reference(playback_url)
+        if duplicate is not None:
+            raise DuplicateVideoReferenceError(duplicate.videoId)
+
         record = VideoRecord(
             video_id=video_id,
             source_type="upload",
             title=title,
+            description=description,
             original_filename=original_filename,
             storage_backend=storage_backend,
             storage_key=storage_key,
@@ -192,8 +263,17 @@ class SQLiteStore:
         if record is None:
             return None
 
+        duplicate_reference = changes.get("originalUrl") if "originalUrl" in changes else None
+        duplicate_playback = changes.get("playbackUrl") if "playbackUrl" in changes else None
+        for reference in (duplicate_reference, duplicate_playback):
+            duplicate = self.find_video_by_reference(reference, exclude_video_id=video_id)
+            if duplicate is not None:
+                raise DuplicateVideoReferenceError(duplicate.videoId)
+
         if "title" in changes:
             record.title = self._empty_string_to_none(changes["title"])
+        if "description" in changes:
+            record.description = self._empty_string_to_none(changes["description"])
         if "sourceType" in changes and changes["sourceType"] is not None:
             record.source_type = str(changes["sourceType"])
         if "originalUrl" in changes:
@@ -206,6 +286,26 @@ class SQLiteStore:
         self.db.commit()
         self.db.refresh(record)
         return self._video_asset_from_record(record)
+
+    def find_video_by_reference(self, reference: object, exclude_video_id: str | None = None) -> VideoAsset | None:
+        normalized_reference = normalize_video_reference(reference)
+        if normalized_reference is None:
+            return None
+
+        query = self.db.query(VideoRecord)
+        if exclude_video_id is not None:
+            query = query.filter(VideoRecord.video_id != exclude_video_id)
+
+        for record in query.all():
+            candidates = (
+                record.original_url,
+                record.playback_url,
+                record.storage_key,
+            )
+            if any(normalize_video_reference(candidate) == normalized_reference for candidate in candidates):
+                return self._video_asset_from_record(record)
+
+        return None
 
     def delete_video(self, video_id: str) -> bool:
         record = self.db.get(VideoRecord, video_id)
@@ -229,6 +329,7 @@ class SQLiteStore:
             videoId=record.video_id,
             sourceType=record.source_type,
             title=record.title,
+            description=record.description,
             originalUrl=record.original_url,
             originalFilename=record.original_filename,
             storageBackend=record.storage_backend,

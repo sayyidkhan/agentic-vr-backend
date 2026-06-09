@@ -4,8 +4,37 @@ import uuid
 
 import app.main as app_main
 
+from app.config import Settings
 from app.main import app
 from app.models.schemas import AgentTraceStep, AnalyzeSceneResponse, Character, ResearchResponse, ResearchSource, Scene
+
+
+def test_sceneverse_profile_pairs_database_and_media_storage():
+    local_settings = Settings(
+        _env_file=None,
+        sceneverse_profile="local",
+        local_database_url="sqlite:///./data/local-test.db",
+        local_media_local_dir="./data/local-media-test",
+        cloud_s3_video_bucket="should-not-be-used",
+    )
+    assert local_settings.environment == "local"
+    assert local_settings.database_url == "sqlite:///./data/local-test.db"
+    assert local_settings.media_storage_backend == "local"
+    assert local_settings.media_local_dir == "./data/local-media-test"
+    assert local_settings.s3_video_bucket is None
+
+    cloud_settings = Settings(
+        _env_file=None,
+        sceneverse_profile="cloud",
+        cloud_database_url="sqlite:////ecs/sceneverse.db",
+        cloud_s3_video_bucket="sceneverse-dev-videos",
+        cloud_media_cdn_base_url="https://cdn.example.com",
+    )
+    assert cloud_settings.environment == "cloud"
+    assert cloud_settings.database_url == "sqlite:////ecs/sceneverse.db"
+    assert cloud_settings.media_storage_backend == "s3"
+    assert cloud_settings.s3_video_bucket == "sceneverse-dev-videos"
+    assert cloud_settings.media_cdn_base_url == "https://cdn.example.com"
 
 
 def test_scene_chat_research_checkout_flow():
@@ -240,22 +269,36 @@ def test_scene_chat_research_checkout_flow():
                 json={
                     "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                     "title": "Reference Clip",
+                    "description": "Reference material for admin preview.",
                     "sourceType": "youtube",
                 },
             )
             assert linked_video.status_code == 201
             linked_video_data = linked_video.json()
             assert linked_video_data["sourceType"] == "youtube"
+            assert linked_video_data["description"] == "Reference material for admin preview."
             assert linked_video_data["originalUrl"].startswith("https://www.youtube.com/")
+
+            duplicate_linked_video = client.post(
+                "/api/videos/link",
+                json={
+                    "url": "https://youtu.be/dQw4w9WgXcQ",
+                    "title": "Duplicate Reference Clip",
+                    "sourceType": "youtube",
+                },
+            )
+            assert duplicate_linked_video.status_code == 409
+            assert linked_video_data["videoId"] in duplicate_linked_video.json()["detail"]
 
             uploaded_video = client.post(
                 "/api/videos/upload",
-                data={"title": "Uploaded Demo Clip"},
-                files={"file": ("demo.mp4", BytesIO(b"fake-video-bytes"), "video/mp4")},
+                data={"title": "Uploaded Demo Clip", "description": "Uploaded local media for QA."},
+                files={"file": ("demo.mp4", BytesIO(b"0" * 2048), "video/mp4")},
             )
             assert uploaded_video.status_code == 201
             uploaded_video_data = uploaded_video.json()
             assert uploaded_video_data["sourceType"] == "upload"
+            assert uploaded_video_data["description"] == "Uploaded local media for QA."
             assert uploaded_video_data["storageBackend"] == app_main.settings.media_storage_backend
             assert uploaded_video_data["playbackUrl"]
 
@@ -272,11 +315,13 @@ def test_scene_chat_research_checkout_flow():
                 f"/api/admin/videos/{uploaded_video_data['videoId']}",
                 json={
                     "title": "Updated Demo Clip",
+                    "description": "Updated catalogue description.",
                     "status": "draft",
                 },
             )
             assert updated_video.status_code == 200
             assert updated_video.json()["title"] == "Updated Demo Clip"
+            assert updated_video.json()["description"] == "Updated catalogue description."
             assert updated_video.json()["status"] == "draft"
 
             video_rows = client.get("/api/db/videos", params={"limit": 2})
