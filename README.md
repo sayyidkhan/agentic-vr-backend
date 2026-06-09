@@ -13,10 +13,10 @@ pause video -> analyze scene -> create agents -> chat with memory -> show orches
 - Python 3.13
 - FastAPI
 - SQLAlchemy + SQLite
-- Docker for local and AWS Elastic Beanstalk runtime
+- Docker for local and AWS EC2 runtime
 - Mangum for optional Lambda deployments
 - GitHub Actions CI/CD
-- AWS Elastic Beanstalk Docker deployment
+- AWS EC2 deployment
 
 ## Local Setup
 
@@ -60,10 +60,27 @@ docker build --platform linux/amd64 -f backend/Dockerfile.lambda -t sceneverse-b
 
 Current deployment path:
 
-- AWS Elastic Beanstalk Docker on Amazon Linux 2023.
+- AWS EC2 on Amazon Linux 2023 in `us-east-1`.
 - The root `Dockerfile` runs the backend with `python:3.13-slim`.
 - The app exposes `GET /` and `GET /health` for platform health checks.
 - SQLite is stored inside the running container/instance, which is fine for MVP smoke but not durable production storage.
+
+Live MVP deployment as of `2026-06-09`:
+
+```text
+Base URL: http://32.197.15.186
+Swagger UI: http://32.197.15.186/docs
+ReDoc: http://32.197.15.186/redoc
+OpenAPI JSON: http://32.197.15.186/openapi.json
+```
+
+Verified live endpoints:
+
+- `GET /`
+- `GET /health`
+- `POST /api/scenes/analyze`
+
+Note: this EC2 instance currently uses an ephemeral public IP. If the instance is stopped and started again, the public IP and docs URL may change unless an Elastic IP is attached.
 
 The Lambda workflow is currently manual-only because this AWS account has an AWS Organizations SCP explicitly denying Lambda function creation and ECR repository creation for the GitHub deploy role.
 
