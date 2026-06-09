@@ -124,7 +124,7 @@ This is the current deploy path for the live EC2 backend.
 2. From the repo root, run:
 
 ```bash
-./infra/aws/deploy-ec2-sync.sh
+./infra/aws/deploy-ec2-with-env.sh
 ```
 
 3. Smoke test the deployment:
@@ -191,9 +191,14 @@ backend/app/main.py
 
 More detail lives in [backend/README.md](backend/README.md) and [infra/aws/README.md](infra/aws/README.md).
 
+Payments runbook:
+
+- [docs/payments/README.md](docs/payments/README.md)
+
 ## Current MVP Limits
 
 - Scene parsing uses deterministic fallback data, not a real vision model yet.
-- Research and Stripe paths are placeholders.
+- Research paths are placeholders.
+- Stripe Checkout and webhook verification are implemented for sandbox payments; live payments still need HTTPS/domain hardening.
 - There is no auth layer yet.
 - SQLite is fine for hackathon/demo speed, but production should move to DynamoDB, RDS, or EFS-backed SQLite.
