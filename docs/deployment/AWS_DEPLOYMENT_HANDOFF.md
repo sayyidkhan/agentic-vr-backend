@@ -23,13 +23,19 @@ Live backend as of `2026-06-09`:
 
 ```text
 Instance ID: i-0645b2e19351af657
-Public IP: 32.197.15.186
-Public DNS: ec2-32-197-15-186.compute-1.amazonaws.com
-Base URL: http://32.197.15.186
-Swagger UI: http://32.197.15.186/docs
-ReDoc: http://32.197.15.186/redoc
-OpenAPI JSON: http://32.197.15.186/openapi.json
+Elastic IP: 18.207.53.115
+Public DNS: ec2-18-207-53-115.compute-1.amazonaws.com
+Base URL: http://18.207.53.115
+Swagger UI: http://18.207.53.115/docs
+ReDoc: http://18.207.53.115/redoc
+OpenAPI JSON: http://18.207.53.115/openapi.json
 ```
+
+Elastic IP change captured in this handoff:
+
+- An Elastic IP was allocated and associated to the EC2 instance after initial deployment.
+- Stable public IP: `18.207.53.115`
+- This replaced the earlier ephemeral EC2 public IP for both app access and SSH access.
 
 Verified endpoints:
 
@@ -90,9 +96,9 @@ docker run -d \
 Post-deploy smoke test:
 
 ```bash
-curl -fsS http://32.197.15.186/health
-curl -fsS http://32.197.15.186/
-curl -fsS http://32.197.15.186/docs > /dev/null
+curl -fsS http://18.207.53.115/health
+curl -fsS http://18.207.53.115/
+curl -fsS http://18.207.53.115/docs > /dev/null
 ```
 
 Runtime checks:
@@ -123,6 +129,13 @@ Important nuance:
 
 GitHub OIDC provider was created.
 
+Elastic IP work completed:
+
+- Elastic IP allocated in `us-east-1`
+- Elastic IP associated to instance `i-0645b2e19351af657`
+- Local SSH alias `sceneverse-prod` repointed to `18.207.53.115`
+- Deployment docs and script defaults updated to use the stable endpoint
+
 IAM role:
 
 ```text
@@ -137,7 +150,7 @@ AWS_GITHUB_ACTIONS_ROLE_ARN=arn:aws:iam::647526506319:role/sceneverse-backend-gi
 
 ## Operational Notes
 
-- The current EC2 instance uses an ephemeral public IP unless an Elastic IP is attached.
+- The current EC2 instance now has an Elastic IP attached, so the public URL is stable.
 - SQLite is acceptable for MVP/demo use, but it is not durable production storage.
 - This is currently a single-host deployment with manual redeploys.
 
@@ -152,4 +165,4 @@ If real CD is needed next, the most practical path is:
 
 ## Summary
 
-Backend is live on EC2 in `us-east-1`. CI exists and is working. CD to the EC2 host is still manual. Swagger is available at `http://32.197.15.186/docs`.
+Backend is live on EC2 in `us-east-1`. CI exists and is working. CD to the EC2 host is still manual. Swagger is available at `http://18.207.53.115/docs`.

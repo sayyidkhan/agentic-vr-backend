@@ -12,6 +12,18 @@ class HealthResponse(BaseModel):
     environment: str
 
 
+class DatabaseHealthResponse(BaseModel):
+    status: Literal["ok", "error"]
+    database: str
+    engine: str
+    databasePath: Optional[str] = None
+    sqliteVersion: Optional[str] = None
+    quickCheck: Optional[str] = None
+    journalMode: Optional[str] = None
+    schemaRevision: Optional[str] = None
+    tableCount: Optional[int] = None
+
+
 class VideoMetadata(BaseModel):
     videoId: Optional[str] = None
     title: Optional[str] = None

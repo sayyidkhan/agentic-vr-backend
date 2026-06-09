@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.agents.orchestrator import OrchestratorAgent
@@ -15,6 +16,7 @@ from app.models.schemas import (
     ChatResponse,
     CheckoutRequest,
     CheckoutResponse,
+    DatabaseHealthResponse,
     HealthResponse,
     ResearchRequest,
     ResearchResponse,
@@ -48,6 +50,48 @@ checkout_service = CheckoutService(settings=settings)
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(status="ok", app=settings.app_name, environment=settings.environment)
+
+
+@app.get("/health/db", response_model=DatabaseHealthResponse)
+def database_health(db: Session = Depends(get_db)) -> DatabaseHealthResponse:
+    database = settings.database_url.split(":", 1)[0]
+
+    try:
+        db.execute(text("SELECT 1"))
+
+        schema_revision = db.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar_one_or_none()
+        table_count = len(inspect(db.bind).get_table_names()) if db.bind is not None else None
+
+        if not settings.database_url.startswith("sqlite"):
+            return DatabaseHealthResponse(
+                status="ok",
+                database=database,
+                engine="sqlalchemy",
+                schemaRevision=schema_revision,
+                tableCount=table_count,
+            )
+
+        sqlite_version = db.execute(text("SELECT sqlite_version()")).scalar_one()
+        quick_check = db.execute(text("PRAGMA quick_check")).scalar_one()
+        journal_mode = db.execute(text("PRAGMA journal_mode")).scalar_one()
+        database_path = db.execute(text("PRAGMA database_list")).mappings().first()
+        resolved_database_path = None
+        if database_path is not None:
+            resolved_database_path = database_path["file"] or ":memory:"
+
+        return DatabaseHealthResponse(
+            status="ok",
+            database="sqlite",
+            engine="sqlalchemy",
+            databasePath=resolved_database_path,
+            sqliteVersion=sqlite_version,
+            quickCheck=quick_check,
+            journalMode=journal_mode,
+            schemaRevision=schema_revision,
+            tableCount=table_count,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Database health check failed: {exc}") from exc
 
 
 @app.get("/", response_model=HealthResponse)

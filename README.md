@@ -63,24 +63,31 @@ Current deployment path:
 - AWS EC2 on Amazon Linux 2023 in `us-east-1`.
 - The root `Dockerfile` runs the backend with `python:3.13-slim`.
 - The app exposes `GET /` and `GET /health` for platform health checks.
-- SQLite is stored inside the running container/instance, which is fine for MVP smoke but not durable production storage.
+- SQLite is mounted from `/opt/sceneverse-data/sceneverse.db` on the EC2 host, which is acceptable for MVP but still single-host storage.
 
 Live MVP deployment as of `2026-06-09`:
 
 ```text
-Base URL: http://32.197.15.186
-Swagger UI: http://32.197.15.186/docs
-ReDoc: http://32.197.15.186/redoc
-OpenAPI JSON: http://32.197.15.186/openapi.json
+Base URL: http://18.207.53.115
+Swagger UI: http://18.207.53.115/docs
+ReDoc: http://18.207.53.115/redoc
+OpenAPI JSON: http://18.207.53.115/openapi.json
 ```
+
+AWS networking note:
+
+- An AWS Elastic IP was allocated and associated to the EC2 instance.
+- That Elastic IP is `18.207.53.115`.
+- This keeps the deploy URL and SSH target stable across EC2 stop/start cycles.
 
 Verified live endpoints:
 
 - `GET /`
 - `GET /health`
+- `GET /health/db`
 - `POST /api/scenes/analyze`
 
-Note: this EC2 instance currently uses an ephemeral public IP. If the instance is stopped and started again, the public IP and docs URL may change unless an Elastic IP is attached.
+Note: this EC2 instance now has an Elastic IP attached, so the public URL is stable across stop/start cycles.
 
 ## CI/CD Status
 
@@ -113,48 +120,66 @@ Reason the live deployment is still manual:
 
 This is the current deploy path for the live EC2 backend.
 
-1. Push backend changes to the branch you want deployed.
-2. Make sure CI passed in GitHub Actions.
-3. Connect to the EC2 instance using your preferred AWS access path.
-4. On the instance, update the checked-out repo and rebuild the container:
+1. Make sure your local machine can SSH to the instance.
+2. From the repo root, run:
 
 ```bash
-cd /opt/sceneverse
-git pull origin main
-docker build -t sceneverse-backend:latest .
-docker rm -f sceneverse-backend || true
-docker run -d \
-  --restart unless-stopped \
-  --name sceneverse-backend \
-  -p 80:8000 \
-  -e APP_NAME="SceneVerse AI Backend" \
-  -e ENVIRONMENT=prod \
-  -e DATABASE_URL=sqlite:///./data/sceneverse.db \
-  -e FRONTEND_URL=http://localhost:5173 \
-  -e CORS_ORIGINS='*' \
-  sceneverse-backend:latest
+./infra/aws/deploy-ec2-sync.sh
 ```
 
-5. Smoke test the deployment:
+3. Smoke test the deployment:
 
 ```bash
-curl -fsS http://32.197.15.186/health
-curl -fsS http://32.197.15.186/
-curl -fsS http://32.197.15.186/docs > /dev/null
+curl -fsS http://18.207.53.115/health
+curl -fsS http://18.207.53.115/health/db
+curl -fsS http://18.207.53.115/
+curl -fsS http://18.207.53.115/docs > /dev/null
 ```
 
-6. If needed, verify the container directly:
+4. If needed, verify the container directly:
 
 ```bash
 docker ps
 docker logs --tail=100 sceneverse-backend
 ```
 
+SSH notes:
+
+- Expected SSH alias: `sceneverse-prod`
+- Expected local key: `~/.ssh/sceneverse_ec2`
+- Expected SSH user: `ec2-user`
+- Port `22` must be open in the EC2 Security Group for your current public IP as `/32`
+
+Recommended SSH config:
+
+```sshconfig
+Host sceneverse-prod
+  HostName 18.207.53.115
+  User ec2-user
+  IdentityFile ~/.ssh/sceneverse_ec2
+  IdentitiesOnly yes
+```
+
+If SSH is not bootstrapped yet:
+
+- use AWS CloudShell or EC2 Instance Connect to push a temporary public key
+- SSH in once
+- append your durable local public key into `/home/ec2-user/.ssh/authorized_keys`
+- verify with `ssh sceneverse-prod`
+
+Does SSH expire?
+
+- normal SSH access with `~/.ssh/sceneverse_ec2` does not expire automatically
+- temporary EC2 Instance Connect bootstrap access does expire
+- if direct SSH stops working later, usually the cause is changed `authorized_keys`, changed local/public IP, or a host key trust mismatch, not key expiry
+
 Operational notes:
 
-- This is manual CD, not automated CD.
-- The instance currently uses an ephemeral public IP unless an Elastic IP is attached.
-- SQLite data lives on that single host/container path, so this is acceptable for MVP only.
+- This is still manual CD, but it is now scriptable and repeatable from a local machine.
+- The instance currently uses an Elastic IP, so the public URL should remain stable.
+- If SSH fails with `Host key verification failed` after repointing the alias or changing the host IP, refresh trust once with `ssh -o StrictHostKeyChecking=accept-new sceneverse-prod true`.
+- If your ISP/public IP changes, update the Security Group ingress rule for port `22`.
+- SQLite data lives on the single host at `/opt/sceneverse-data/sceneverse.db`, so this is acceptable for MVP only.
 
 Useful files:
 

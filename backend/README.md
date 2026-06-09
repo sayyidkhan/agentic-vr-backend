@@ -27,6 +27,7 @@ It currently uses deterministic fallback agents and SQLite so the product loop c
 - FastAPI
 - Pydantic
 - SQLAlchemy
+- Alembic
 - SQLite for MVP persistence
 - Docker for local and AWS EC2 runtime
 - Mangum for optional AWS Lambda deployment
@@ -65,6 +66,11 @@ backend/
   requirements.txt
   requirements-dev.txt
   pyproject.toml
+  alembic.ini
+  alembic/
+    env.py
+    script.py.mako
+    versions/
 ```
 
 ## Prerequisites
@@ -103,6 +109,12 @@ Run the API:
 uvicorn app.main:app --reload
 ```
 
+Apply database migrations:
+
+```bash
+alembic upgrade head
+```
+
 Open:
 
 ```text
@@ -138,6 +150,31 @@ Current behavior:
 - `EXA_API_KEY` is not used yet.
 - Empty Stripe keys return a simulated unlock URL.
 
+## Database Migrations
+
+The project uses Alembic on top of SQLAlchemy so the current SQLite schema can later be promoted to PostgreSQL with a normal migration workflow.
+
+Run the latest migrations:
+
+```bash
+cd backend
+source .venv/bin/activate
+alembic upgrade head
+```
+
+Create a new migration after model changes:
+
+```bash
+alembic revision --autogenerate -m "describe change"
+```
+
+Current notes:
+
+- `app.database.init_db()` bootstraps the current SQLAlchemy schema and stamps the initial Alembic revision for MVP convenience.
+- For deployed environments, prefer running `alembic upgrade head` during startup or deployment.
+- Keep schema changes SQLAlchemy-portable so the later move from SQLite to PostgreSQL stays cheap.
+- Existing local SQLite files created before Alembic was added are stamped to the initial revision on next app startup.
+
 ## Run Tests
 
 ```bash
@@ -149,6 +186,7 @@ pytest
 The smoke test covers:
 
 - `GET /health`
+- `GET /health/db`
 - `POST /api/scenes/analyze`
 - `POST /api/chat`
 - `POST /api/research`
@@ -165,6 +203,26 @@ Example:
 ```bash
 curl http://localhost:8000/health
 ```
+
+### `GET /health/db`
+
+Checks database connectivity and SQLite integrity details.
+
+Example:
+
+```bash
+curl http://localhost:8000/health/db
+```
+
+Response includes:
+
+- `status`
+- `database`
+- `databasePath`
+- `sqliteVersion`
+- `quickCheck`
+- `journalMode`
+- `schemaRevision`
 
 ### `POST /api/scenes/analyze`
 
@@ -385,55 +443,51 @@ Current AWS deployment target:
 - AWS EC2 on Amazon Linux 2023 in `us-east-1`
 - Root `Dockerfile` using `python:3.13-slim`
 - Public EC2 IP / DNS
-- `/` and `/health` health checks
+- `/`, `/health`, and `/health/db` health checks
+- SQLite persisted on-host at `/opt/sceneverse-data/sceneverse.db`
 
 Live deployment as of `2026-06-09`:
 
 ```text
-Base URL: http://32.197.15.186
-Swagger UI: http://32.197.15.186/docs
-ReDoc: http://32.197.15.186/redoc
-OpenAPI JSON: http://32.197.15.186/openapi.json
+Base URL: http://18.207.53.115
+Swagger UI: http://18.207.53.115/docs
+ReDoc: http://18.207.53.115/redoc
+OpenAPI JSON: http://18.207.53.115/openapi.json
 ```
 
 Manual CD runbook for EC2:
 
-1. Push backend changes.
-2. Wait for [`.github/workflows/backend-ci.yml`](../.github/workflows/backend-ci.yml) to pass.
-3. Connect to the EC2 host.
-4. Rebuild and restart the container:
+1. Make sure your local machine can SSH to the EC2 host.
+2. From the repo root, run:
 
 ```bash
-cd /opt/sceneverse
-git pull origin main
-docker build -t sceneverse-backend:latest .
-docker rm -f sceneverse-backend || true
-docker run -d \
-  --restart unless-stopped \
-  --name sceneverse-backend \
-  -p 80:8000 \
-  -e APP_NAME="SceneVerse AI Backend" \
-  -e ENVIRONMENT=prod \
-  -e DATABASE_URL=sqlite:///./data/sceneverse.db \
-  -e FRONTEND_URL=http://localhost:5173 \
-  -e CORS_ORIGINS='*' \
-  sceneverse-backend:latest
+./infra/aws/deploy-ec2-sync.sh
 ```
 
-5. Smoke test:
+3. Smoke test:
 
 ```bash
-curl -fsS http://32.197.15.186/health
-curl -fsS http://32.197.15.186/
-curl -fsS http://32.197.15.186/docs > /dev/null
+curl -fsS http://18.207.53.115/health
+curl -fsS http://18.207.53.115/health/db
+curl -fsS http://18.207.53.115/
+curl -fsS http://18.207.53.115/docs > /dev/null
 ```
 
-6. Check runtime state if anything looks off:
+4. Check runtime state if anything looks off:
 
 ```bash
 docker ps
 docker logs --tail=100 sceneverse-backend
 ```
+
+SSH assumptions for the current deploy script:
+
+- host alias: `sceneverse-prod`
+- SSH user: `ec2-user`
+- local key: `~/.ssh/sceneverse_ec2`
+- EC2 Security Group must allow TCP `22` from your current public IP `/32`
+
+If the instance does not trust your local key yet, bootstrap once with AWS CloudShell or EC2 Instance Connect, then append your durable public key into `/home/ec2-user/.ssh/authorized_keys`.
 
 Optional Lambda files are still present, but the Lambda workflow is manual-only and separate from the current EC2 runtime. Some AWS deploy operations have also been constrained by the AWS Organizations SCP in this account.
 

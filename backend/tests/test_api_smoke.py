@@ -9,6 +9,12 @@ def test_scene_chat_research_checkout_flow():
         assert health.status_code == 200
         assert health.json()["status"] == "ok"
 
+        db_health = client.get("/health/db")
+        assert db_health.status_code == 200
+        assert db_health.json()["status"] == "ok"
+        assert db_health.json()["database"] == "sqlite"
+        assert db_health.json()["quickCheck"] == "ok"
+
         analyze = client.post(
             "/api/scenes/analyze",
             json={
