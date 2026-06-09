@@ -33,6 +33,7 @@ from app.models.schemas import (
     ModelProbeBatchResponse,
     ModelProbeRequest,
     ModelProbeResponse,
+    RealtimeTranscriptionTokenResponse,
     VideoAsset,
     VideoListResponse,
     HealthResponse,
@@ -44,6 +45,7 @@ from app.models.schemas import (
 from app.services.bedrock_runtime import BedrockRuntimeService
 from app.services.checkout import CheckoutService
 from app.services.model_runtime import ModelRuntimeService
+from app.services.openai_realtime import OpenAIRealtimeError, OpenAIRealtimeService
 from app.services.video_storage import VideoStorageService
 from app.store.sqlite_store import SQLiteStore
 
@@ -73,6 +75,7 @@ orchestrator = OrchestratorAgent(settings=settings, research_agent=research_agen
 bedrock_runtime = BedrockRuntimeService(settings=settings)
 model_runtime = ModelRuntimeService(settings=settings)
 checkout_service = CheckoutService(settings=settings)
+openai_realtime_service = OpenAIRealtimeService(settings=settings)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -104,6 +107,14 @@ def test_configured_model(payload: ModelProbeRequest | None = None) -> ModelProb
 def test_all_configured_models(payload: ModelProbeRequest | None = None) -> ModelProbeBatchResponse:
     request = payload or ModelProbeRequest()
     return model_runtime.probe_all(prompt=request.prompt)
+
+
+@app.post("/api/realtime/transcription-token", response_model=RealtimeTranscriptionTokenResponse)
+def create_realtime_transcription_token() -> RealtimeTranscriptionTokenResponse:
+    try:
+        return openai_realtime_service.create_transcription_token()
+    except OpenAIRealtimeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @app.get("/health/db", response_model=DatabaseHealthResponse)

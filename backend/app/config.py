@@ -18,6 +18,20 @@ class Settings(BaseSettings):
     bedrock_model_id: str = Field(default="amazon.nova-lite-v1:0", alias="BEDROCK_MODEL_ID")
     bedrock_api_key: Optional[str] = Field(default=None, alias="AWS_BEARER_TOKEN_BEDROCK")
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    openai_realtime_transcription_model: str = Field(
+        default="gpt-4o-transcribe",
+        alias="OPENAI_REALTIME_TRANSCRIPTION_MODEL",
+    )
+    openai_realtime_token_ttl_seconds: int = Field(default=600, alias="OPENAI_REALTIME_TOKEN_TTL_SECONDS")
+    openai_realtime_vad_threshold: float = Field(default=0.5, alias="OPENAI_REALTIME_VAD_THRESHOLD")
+    openai_realtime_vad_prefix_padding_ms: int = Field(
+        default=300,
+        alias="OPENAI_REALTIME_VAD_PREFIX_PADDING_MS",
+    )
+    openai_realtime_vad_silence_duration_ms: int = Field(
+        default=800,
+        alias="OPENAI_REALTIME_VAD_SILENCE_DURATION_MS",
+    )
     model_registry_path: str = Field(default="app/data/enabled_models.json", alias="MODEL_REGISTRY_PATH")
     enable_live_scene_analysis: bool = Field(default=False, alias="ENABLE_LIVE_SCENE_ANALYSIS")
     scene_analysis_model_id: str = Field(default="global.anthropic.claude-sonnet-4-6", alias="SCENE_ANALYSIS_MODEL_ID")

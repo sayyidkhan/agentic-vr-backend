@@ -90,6 +90,21 @@ class ModelCatalogResponse(BaseModel):
     models: list[EnabledModelResponse]
 
 
+class RealtimeTurnDetection(BaseModel):
+    type: Literal["server_vad"]
+    threshold: float
+    prefixPaddingMs: int
+    silenceDurationMs: int
+
+
+class RealtimeTranscriptionTokenResponse(BaseModel):
+    value: str
+    expiresAt: int
+    model: str
+    provider: Literal["openai"]
+    turnDetection: RealtimeTurnDetection
+
+
 class VideoMetadata(BaseModel):
     videoId: Optional[str] = None
     title: Optional[str] = None
