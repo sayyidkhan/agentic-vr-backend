@@ -28,10 +28,10 @@ It currently uses deterministic fallback agents and SQLite so the product loop c
 - Pydantic
 - SQLAlchemy
 - SQLite for MVP persistence
-- Docker for local and AWS Elastic Beanstalk runtime
+- Docker for local and AWS EC2 runtime
 - Mangum for optional AWS Lambda deployment
-- GitHub Actions CI/CD
-- AWS Lambda Function URL deployment path
+- GitHub Actions CI
+- AWS EC2 deployment path
 
 ## Project Structure
 
@@ -275,7 +275,7 @@ SQLite is not good for:
 - durable AWS Lambda local storage
 - high-concurrency writes
 
-For the first AWS Elastic Beanstalk Docker deployment, the container should use:
+For the current AWS EC2 deployment, the container should use:
 
 ```text
 sqlite:///./data/sceneverse.db
@@ -374,14 +374,68 @@ CI runs on backend changes and checks:
 - normal Docker build
 - Lambda Docker build
 
+Current status:
+
+- CI is available and active in GitHub Actions.
+- CD to the live EC2 backend is manual.
+- The Lambda deploy workflow exists, but it is manual-only and is not the current production path.
+
 Current AWS deployment target:
 
-- AWS Elastic Beanstalk Docker on Amazon Linux 2023
+- AWS EC2 on Amazon Linux 2023 in `us-east-1`
 - Root `Dockerfile` using `python:3.13-slim`
-- Public Beanstalk environment URL
+- Public EC2 IP / DNS
 - `/` and `/health` health checks
 
-Optional Lambda files are still present, but the Lambda workflow is manual-only because this AWS account currently has an AWS Organizations SCP denying Lambda creation and ECR repository creation for the GitHub deploy role.
+Live deployment as of `2026-06-09`:
+
+```text
+Base URL: http://32.197.15.186
+Swagger UI: http://32.197.15.186/docs
+ReDoc: http://32.197.15.186/redoc
+OpenAPI JSON: http://32.197.15.186/openapi.json
+```
+
+Manual CD runbook for EC2:
+
+1. Push backend changes.
+2. Wait for [`.github/workflows/backend-ci.yml`](../.github/workflows/backend-ci.yml) to pass.
+3. Connect to the EC2 host.
+4. Rebuild and restart the container:
+
+```bash
+cd /opt/sceneverse
+git pull origin main
+docker build -t sceneverse-backend:latest .
+docker rm -f sceneverse-backend || true
+docker run -d \
+  --restart unless-stopped \
+  --name sceneverse-backend \
+  -p 80:8000 \
+  -e APP_NAME="SceneVerse AI Backend" \
+  -e ENVIRONMENT=prod \
+  -e DATABASE_URL=sqlite:///./data/sceneverse.db \
+  -e FRONTEND_URL=http://localhost:5173 \
+  -e CORS_ORIGINS='*' \
+  sceneverse-backend:latest
+```
+
+5. Smoke test:
+
+```bash
+curl -fsS http://32.197.15.186/health
+curl -fsS http://32.197.15.186/
+curl -fsS http://32.197.15.186/docs > /dev/null
+```
+
+6. Check runtime state if anything looks off:
+
+```bash
+docker ps
+docker logs --tail=100 sceneverse-backend
+```
+
+Optional Lambda files are still present, but the Lambda workflow is manual-only and separate from the current EC2 runtime. Some AWS deploy operations have also been constrained by the AWS Organizations SCP in this account.
 
 AWS-related files:
 

@@ -15,7 +15,7 @@ pause video -> analyze scene -> create agents -> chat with memory -> show orches
 - SQLAlchemy + SQLite
 - Docker for local and AWS EC2 runtime
 - Mangum for optional Lambda deployments
-- GitHub Actions CI/CD
+- GitHub Actions CI
 - AWS EC2 deployment
 
 ## Local Setup
@@ -82,7 +82,79 @@ Verified live endpoints:
 
 Note: this EC2 instance currently uses an ephemeral public IP. If the instance is stopped and started again, the public IP and docs URL may change unless an Elastic IP is attached.
 
-The Lambda workflow is currently manual-only because this AWS account has an AWS Organizations SCP explicitly denying Lambda function creation and ECR repository creation for the GitHub deploy role.
+## CI/CD Status
+
+Current state:
+
+- CI is available in GitHub Actions.
+- CD to the live EC2 deployment is manual.
+- The Lambda deploy workflow exists, but it is not the live runtime path.
+
+CI workflow:
+
+- [`.github/workflows/backend-ci.yml`](.github/workflows/backend-ci.yml)
+- Runs on pull requests and qualifying pushes.
+- Checks Python install, compile step, `pytest`, FastAPI Docker build, and Lambda Docker build.
+
+Manual-only deploy workflow:
+
+- [`.github/workflows/deploy-aws-lambda.yml`](.github/workflows/deploy-aws-lambda.yml)
+- Triggered only by `workflow_dispatch`
+- Not wired to the live EC2 instance
+
+Reason the live deployment is still manual:
+
+- The current production backend runs on a single EC2 instance in `us-east-1`.
+- That instance was bootstrapped by user data that cloned the repo, built Docker locally, and ran the container.
+- GitHub Actions does not currently push code or images to that EC2 instance after merges.
+- The Lambda path is retained as an optional future path, but this AWS account has had SCP-related restrictions on some deploy operations.
+
+## Manual CD Runbook
+
+This is the current deploy path for the live EC2 backend.
+
+1. Push backend changes to the branch you want deployed.
+2. Make sure CI passed in GitHub Actions.
+3. Connect to the EC2 instance using your preferred AWS access path.
+4. On the instance, update the checked-out repo and rebuild the container:
+
+```bash
+cd /opt/sceneverse
+git pull origin main
+docker build -t sceneverse-backend:latest .
+docker rm -f sceneverse-backend || true
+docker run -d \
+  --restart unless-stopped \
+  --name sceneverse-backend \
+  -p 80:8000 \
+  -e APP_NAME="SceneVerse AI Backend" \
+  -e ENVIRONMENT=prod \
+  -e DATABASE_URL=sqlite:///./data/sceneverse.db \
+  -e FRONTEND_URL=http://localhost:5173 \
+  -e CORS_ORIGINS='*' \
+  sceneverse-backend:latest
+```
+
+5. Smoke test the deployment:
+
+```bash
+curl -fsS http://32.197.15.186/health
+curl -fsS http://32.197.15.186/
+curl -fsS http://32.197.15.186/docs > /dev/null
+```
+
+6. If needed, verify the container directly:
+
+```bash
+docker ps
+docker logs --tail=100 sceneverse-backend
+```
+
+Operational notes:
+
+- This is manual CD, not automated CD.
+- The instance currently uses an ephemeral public IP unless an Elastic IP is attached.
+- SQLite data lives on that single host/container path, so this is acceptable for MVP only.
 
 Useful files:
 
