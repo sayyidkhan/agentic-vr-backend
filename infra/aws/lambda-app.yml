@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: SceneVerse AI backend Lambda Function URL deployment.
+
+Parameters:
+  ServiceName:
+    Type: String
+    Default: sceneverse-backend
+  EnvironmentName:
+    Type: String
+    Default: prod
+  ImageUri:
+    Type: String
+  FrontendUrl:
+    Type: String
+    Default: http://localhost:5173
+  CorsOrigins:
+    Type: String
+    Default: "*"
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ServiceName}-${EnvironmentName}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  BackendFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ServiceName}-${EnvironmentName}"
+      PackageType: Image
+      Code:
+        ImageUri: !Ref ImageUri
+      Architectures:
+        - x86_64
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 1024
+      Environment:
+        Variables:
+          APP_NAME: SceneVerse AI Backend
+          ENVIRONMENT: !Ref EnvironmentName
+          DATABASE_URL: sqlite:////tmp/sceneverse.db
+          FRONTEND_URL: !Ref FrontendUrl
+          CORS_ORIGINS: !Ref CorsOrigins
+
+  BackendFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref BackendFunction
+      AuthType: NONE
+      Cors:
+        AllowCredentials: false
+        AllowHeaders:
+          - "*"
+        AllowMethods:
+          - "*"
+        AllowOrigins: !Split [",", !Ref CorsOrigins]
+
+  BackendFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BackendFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+Outputs:
+  FunctionName:
+    Value: !Ref BackendFunction
+  FunctionUrl:
+    Value: !GetAtt BackendFunctionUrl.FunctionUrl

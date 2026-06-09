@@ -1,0 +1,31 @@
+{
+  "transcriptSegment": "You said this place was safe. Then why is everyone watching us?",
+  "summary": "A tense cinematic standoff unfolds after the characters realize their supposed refuge may be compromised.",
+  "setting": "A dim transit concourse after closing hours",
+  "emotionalTone": "tense, suspicious, and urgent",
+  "conflict": "One character wants to keep moving while another needs the truth before trusting the plan",
+  "objects": ["flickering departure board", "abandoned suitcase", "security camera", "rain-streaked glass"],
+  "directorContext": "The scene uses an empty public space to make the characters feel exposed despite being physically alone.",
+  "characters": [
+    {
+      "slug": "maya",
+      "name": "Maya",
+      "role": "The cautious survivor who notices the trap first",
+      "personality": "observant, guarded, direct",
+      "emotionalState": "tense but controlled",
+      "goals": ["protect the group", "force the truth into the open"],
+      "knowledgeBoundaries": ["Maya does not know who is controlling the station cameras."],
+      "speakingStyle": "short, precise, suspicious"
+    },
+    {
+      "slug": "ren",
+      "name": "Ren",
+      "role": "The conflicted guide who may be hiding a prior deal",
+      "personality": "resourceful, evasive, loyal under pressure",
+      "emotionalState": "anxious and defensive",
+      "goals": ["get everyone out before midnight", "avoid revealing the full bargain"],
+      "knowledgeBoundaries": ["Ren knows the route but not the full identity of the watcher."],
+      "speakingStyle": "measured, indirect, occasionally sharp"
+    }
+  ]
+}

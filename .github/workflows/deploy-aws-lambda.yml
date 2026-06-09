@@ -1,0 +1,82 @@
+name: Deploy Backend to AWS Lambda
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "infra/aws/**"
+      - ".github/workflows/deploy-aws-lambda.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'sceneverse-backend' }}
+  STACK_NAME: ${{ vars.STACK_NAME || 'sceneverse-backend-lambda' }}
+  SERVICE_NAME: ${{ vars.SERVICE_NAME || 'sceneverse-backend' }}
+  FRONTEND_URL: ${{ vars.FRONTEND_URL || 'http://localhost:5173' }}
+  CORS_ORIGINS: ${{ vars.CORS_ORIGINS || '*' }}
+
+jobs:
+  deploy:
+    name: Build image and deploy Lambda
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure ECR repository
+        run: |
+          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 \
+            || aws ecr create-repository \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-scanning-configuration scanOnPush=true >/dev/null
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve image URI
+        id: image
+        run: |
+          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:${GITHUB_SHA}"
+          echo "uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "Image URI: $IMAGE_URI"
+
+      - name: Build Lambda image
+        run: docker build --platform linux/amd64 -f backend/Dockerfile.lambda -t "${{ steps.image.outputs.uri }}" backend
+
+      - name: Push Lambda image
+        run: docker push "${{ steps.image.outputs.uri }}"
+
+      - name: Deploy Lambda stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infra/aws/lambda-app.yml \
+            --stack-name "$STACK_NAME" \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              ServiceName="$SERVICE_NAME" \
+              EnvironmentName="prod" \
+              ImageUri="${{ steps.image.outputs.uri }}" \
+              FrontendUrl="$FRONTEND_URL" \
+              CorsOrigins="$CORS_ORIGINS"
+
+      - name: Print Function URL
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='FunctionUrl'].OutputValue" \
+            --output text
