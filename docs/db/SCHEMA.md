@@ -1,15 +1,15 @@
 # Database Schema
 
-This document describes the current SQLite schema used by the backend.
+This document describes the current SQLAlchemy-managed schema used by the backend.
 
 Source of truth:
 
 - SQLAlchemy models: [`backend/app/models/db.py`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/app/models/db.py)
-- Initial Alembic migration: [`backend/alembic/versions/20260609_0001_initial_schema.py`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/alembic/versions/20260609_0001_initial_schema.py)
+- Alembic migrations: [`backend/alembic/versions/`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/alembic/versions)
 
 Current schema revision:
 
-- `20260609_0002`
+- `20260609_0004`
 
 Current managed tables:
 
@@ -18,13 +18,14 @@ Current managed tables:
 - `conversation_turns`
 - `research_contexts`
 - `character_sessions`
+- `videos`
 - `alembic_version`
 
 ## Storage Notes
 
-- Current database engine: SQLite via SQLAlchemy
-- Default local DB path: `sqlite:///./data/sceneverse.db`
-- Current deployed DB path inside container: `/app/data/sceneverse.db`
+- Current cloud database engine: AWS RDS Postgres via SQLAlchemy and `psycopg`
+- Local fallback database engine: SQLite via SQLAlchemy
+- Shared team development should use the cloud Postgres database, either through the deployed EC2 backend or through `backend/scripts/run_cloud_backend_local.sh`
 - JSON-like payloads are stored as `TEXT` columns with `_json` suffixes
 - Timestamps are stored as timezone-aware UTC datetimes
 
@@ -34,12 +35,17 @@ Current managed tables:
 scenes
   ├── characters
   ├── conversation_turns
+  ├── character_sessions
   └── research_contexts
+
+videos
 ```
 
 - One `scene` can have many `characters`
 - One `scene` can have many `conversation_turns`
 - One `scene` can have many `research_contexts`
+- One `scene` can have many `character_sessions`
+- `videos` stores catalogue/media metadata and is not currently linked by a foreign key to `scenes.video_id`
 
 ## Tables
 
@@ -155,6 +161,35 @@ Indexes:
 
 - `ix_character_sessions_scene_id` on `scene_id`
 - `ix_character_sessions_character_id` on `character_id`
+
+### `videos`
+
+Primary purpose:
+
+- Stores public catalogue/admin video metadata and media pointers
+
+Columns:
+
+| Column | Type | Null | Key | Notes |
+|---|---|---:|---|---|
+| `video_id` | `String(64)` | No | PK | Video identifier returned by API |
+| `source_type` | `String(32)` | No | Indexed | `upload`, `youtube`, or external source type |
+| `title` | `String(255)` | Yes |  | Catalogue title |
+| `description` | `Text` | Yes |  | Short catalogue/admin description |
+| `original_url` | `Text` | Yes |  | External/YouTube source URL |
+| `original_filename` | `String(255)` | Yes |  | Original uploaded filename |
+| `storage_backend` | `String(32)` | Yes |  | `s3` or `local` |
+| `storage_key` | `Text` | Yes |  | S3 object key or local relative path |
+| `playback_url` | `Text` | Yes |  | CloudFront/S3/local playback URL |
+| `content_type` | `String(120)` | Yes |  | Uploaded media content type |
+| `file_size_bytes` | `Integer` | Yes |  | Uploaded media size |
+| `status` | `String(32)` | No |  | Catalogue status, usually `ready` |
+| `created_at` | `DateTime(timezone=True)` | No |  | UTC creation timestamp |
+| `updated_at` | `DateTime(timezone=True)` | No |  | UTC update timestamp |
+
+Indexes:
+
+- `ix_videos_source_type` on `source_type`
 
 ### `alembic_version`
 

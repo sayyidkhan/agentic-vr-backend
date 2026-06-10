@@ -12,7 +12,8 @@ pause video -> analyze scene -> create agents -> chat with memory -> show orches
 
 - Python 3.13
 - FastAPI
-- SQLAlchemy + SQLite
+- SQLAlchemy + AWS RDS Postgres
+- SQLite fallback for isolated local backend runs
 - Docker for local and AWS EC2 runtime
 - Mangum for optional Lambda deployments
 - GitHub Actions CI
@@ -26,14 +27,17 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements-dev.txt
-uvicorn app.main:app --reload
+./scripts/run_cloud_backend_local.sh
 ```
 
 Health check:
 
 ```bash
 curl http://localhost:8000/health
+curl http://localhost:8000/health/db
 ```
+
+This local backend workflow opens an SSH tunnel through `sceneverse-prod` to private RDS Postgres and keeps media on S3/CloudFront. Use plain `SCENEVERSE_PROFILE=local uvicorn app.main:app --reload` only when you intentionally want disposable local SQLite.
 
 Run tests:
 
@@ -63,9 +67,10 @@ Current deployment path:
 - AWS EC2 on Amazon Linux 2023 in `us-east-1`.
 - The root `Dockerfile` runs the backend with `python:3.13-slim`.
 - The app exposes `GET /` and `GET /health` for platform health checks.
-- SQLite is mounted from `/opt/sceneverse-data/sceneverse.db` on the EC2 host, which is acceptable for MVP but still single-host storage.
+- The live backend uses private AWS RDS Postgres for shared persistence.
+- Uploaded video files use S3 with CloudFront playback URLs.
 
-Live MVP deployment as of `2026-06-09`:
+Live MVP deployment as of `2026-06-10`:
 
 ```text
 Base URL: http://18.207.53.115
@@ -187,7 +192,7 @@ Operational notes:
 - The instance currently uses an Elastic IP, so the public URL should remain stable.
 - If SSH fails with `Host key verification failed` after repointing the alias or changing the host IP, refresh trust once with `ssh -o StrictHostKeyChecking=accept-new sceneverse-prod true`.
 - If your ISP/public IP changes, update the Security Group ingress rule for port `22`.
-- SQLite data lives on the single host at `/opt/sceneverse-data/sceneverse.db`, so this is acceptable for MVP only.
+- RDS is private. Do not open Postgres to public laptop IPs; use the SSH tunnel workflow in `backend/scripts/run_cloud_backend_local.sh`.
 
 Useful files:
 
@@ -209,4 +214,5 @@ Payments runbook:
 - Research paths are placeholders.
 - Stripe Checkout and webhook verification are implemented for sandbox payments; live payments still need HTTPS/domain hardening.
 - There is no auth layer yet.
-- SQLite is fine for hackathon/demo speed, but production should move to DynamoDB, RDS, or EFS-backed SQLite.
+- Admin and debug DB endpoints are not production-safe yet.
+- The deploy path is still manual over SSH.

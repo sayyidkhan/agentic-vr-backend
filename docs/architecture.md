@@ -2,7 +2,7 @@
 
 ## Build Stance
 
-Build this as a web-first agentic movie companion. Do not start with VR, multi-video upload, auth, marketplace, or production persistence.
+Build this as a web-first agentic movie companion. Do not start with VR, marketplace, or a heavy production platform.
 
 The MVP should prove one loop:
 
@@ -26,7 +26,7 @@ flowchart LR
     UnlockUI["Optional Premium Unlock UI"]
   end
 
-  subgraph Backend["AWS Backend - FastAPI on App Runner or Lambda"]
+  subgraph Backend["AWS Backend - FastAPI on EC2"]
     API["API Layer"]
     SceneParser["Scene Parser Agent"]
     Orchestrator["Orchestrator Agent"]
@@ -44,13 +44,17 @@ flowchart LR
     Stripe["Stripe Checkout"]
   end
 
-  subgraph Storage["MVP Storage"]
-    MemoryStore["In-memory Scene Store"]
-    DemoAssets["Local Demo Video + Transcript JSON"]
+  subgraph Storage["Shared Storage"]
+    Postgres["AWS RDS Postgres"]
+    S3["S3 Video Bucket"]
+    CloudFront["CloudFront Media CDN"]
+    DemoAssets["Optional Local Demo Video + Transcript JSON"]
   end
 
   User --> Video
   Video --> Capture
+  CloudFront --> Video
+  S3 --> CloudFront
   DemoAssets --> Video
   DemoAssets --> Capture
 
@@ -59,7 +63,7 @@ flowchart LR
   SceneParser --> LLM
   SceneParser --> Fallbacks
   SceneParser --> Memory
-  Memory --> MemoryStore
+  Memory --> Postgres
 
   API -->|"scene response"| SceneUI
   API -->|"characters"| CharacterUI
@@ -68,6 +72,7 @@ flowchart LR
   ChatUI -->|"POST /api/chat\nsceneId + message + targetAgentId"| API
   API --> Orchestrator
   Orchestrator --> Memory
+  Memory --> Postgres
   Orchestrator --> CharacterAgents
   Orchestrator --> Director
   Orchestrator --> Research
@@ -85,6 +90,16 @@ flowchart LR
   StripeService --> Stripe
 ```
 
+Current runtime paths:
+
+```text
+Normal local frontend:
+localhost:5173 -> EC2 backend -> RDS Postgres + S3/CloudFront
+
+Backend development:
+localhost:5173 -> localhost:8000 FastAPI -> SSH tunnel -> private RDS Postgres + S3/CloudFront
+```
+
 ## Scene Generation Flow
 
 ```mermaid
@@ -95,7 +110,7 @@ sequenceDiagram
   participant SP as Scene Parser Agent
   participant LLM as Vision/Text LLM
   participant MEM as Memory Agent
-  participant Store as Scene Store
+  participant Store as RDS Postgres
 
   User->>FE: Play demo clip
   User->>FE: Pause at dramatic moment
@@ -200,7 +215,7 @@ flowchart TB
 
 - Keep character knowledge separate from Exa/public research.
 - Return `agentTrace` from every backend call because visible orchestration is part of the product proof.
-- Use in-memory scene state for the hackathon; move to DynamoDB after the demo.
-- Keep captured frames as base64 for MVP; move to S3 only if persistence becomes necessary.
-- Use App Runner for the FastAPI backend unless Lambda is required by judging criteria.
+- Use RDS Postgres as the shared source of truth for scene, memory, character, and video catalogue metadata.
+- Keep captured frames as base64 for MVP; move persisted captures to S3 only if frame replay becomes necessary.
+- Use EC2 Docker for the FastAPI backend during the hackathon; keep Lambda/App Runner as later options.
 - Treat VR as a later interface layer, not the foundation of the MVP.

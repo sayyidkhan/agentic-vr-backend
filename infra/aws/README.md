@@ -9,10 +9,11 @@ Target:
 - Platform: EC2 on Amazon Linux 2023 in `us-east-1`
 - Runtime: `python:3.13-slim` from the root `Dockerfile`
 - API exposure: public EC2 IP / DNS
-- MVP database: SQLite mounted from `/opt/sceneverse-data/sceneverse.db` on the EC2 host
+- Database: private AWS RDS Postgres
+- Media: S3 bucket with CloudFront playback URLs
 - Health checks: `GET /`, `GET /health`, and `GET /health/db`
 
-Live endpoint as of `2026-06-09`:
+Live endpoint as of `2026-06-10`:
 
 ```text
 Base URL: http://18.207.53.115
@@ -32,10 +33,11 @@ Recommended environment variables:
 ```text
 APP_NAME=SceneVerse AI Backend
 SCENEVERSE_PROFILE=cloud
-ENVIRONMENT=prod
-CLOUD_DATABASE_URL=sqlite:///./data/sceneverse.db
-CLOUD_S3_VIDEO_BUCKET=<video-bucket>
+ENVIRONMENT=cloud
+CLOUD_DATABASE_URL=postgresql+psycopg://sceneverse:<password>@<rds-endpoint>:5432/sceneverse
+CLOUD_S3_VIDEO_BUCKET=sceneverse-videos-647526506319-us-east-1
 CLOUD_MEDIA_STORAGE_PREFIX=videos
+CLOUD_MEDIA_CDN_BASE_URL=https://d2h4eibmqeyvnj.cloudfront.net
 FRONTEND_URL=http://localhost:5173
 CORS_ORIGINS=*
 ```
@@ -180,7 +182,8 @@ Default assumptions:
 - SSH host alias: `sceneverse-prod`
 - Public base URL: `http://18.207.53.115`
 - Remote app dir: `/opt/sceneverse`
-- Remote SQLite dir: `/opt/sceneverse-data`
+- Remote data dir: `/opt/sceneverse-data`, kept for local media/SQLite fallback only
+- Runtime env file: `/opt/sceneverse-config/shared.env`
 
 Example with explicit overrides:
 
@@ -195,7 +198,6 @@ What the script does:
 
 - `deploy-ec2-with-env.sh` calls `sync-ec2-env.sh`, then `deploy-ec2-sync.sh`.
 - rsyncs the current local repo state to the EC2 instance
-- preserves SQLite at `/opt/sceneverse-data/sceneverse.db`
 - reads runtime secrets from `/opt/sceneverse-config/shared.env`
 - rebuilds the Docker image on-instance
 - restarts the `sceneverse-backend` container
@@ -205,7 +207,7 @@ Important behavior:
 
 - It deploys your current local working tree, including uncommitted changes.
 - It does not run `git pull` on the instance.
-- It preserves `/opt/sceneverse-data/sceneverse.db` so SQLite survives container restarts.
+- It preserves `/opt/sceneverse-data` for fallback/local files, but the shared DB is RDS Postgres.
 - It does not sync secrets automatically from your shell; use `./infra/aws/sync-ec2-env.sh` first when runtime keys change.
 
 Post-deploy smoke test:
@@ -216,6 +218,31 @@ curl -fsS http://18.207.53.115/health/db
 curl -fsS http://18.207.53.115/
 curl -fsS http://18.207.53.115/docs > /dev/null
 ```
+
+## Local Backend Against Cloud Database
+
+For backend development with local code but shared cloud data:
+
+```bash
+cd backend
+./scripts/run_cloud_backend_local.sh
+```
+
+This opens:
+
+```text
+127.0.0.1:15432 -> sceneverse-postgres RDS endpoint:5432 via sceneverse-prod
+```
+
+Then it starts FastAPI on `localhost:8000` with:
+
+```text
+SCENEVERSE_PROFILE=cloud
+DATABASE_URL=postgresql+psycopg://...@127.0.0.1:15432/sceneverse
+MEDIA_STORAGE_BACKEND=s3
+```
+
+Do not make the RDS instance public just for local development.
 
 ## Things To Watch
 

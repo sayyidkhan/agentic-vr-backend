@@ -177,8 +177,7 @@ Copy `.env.example` to `.env`.
 
 ```text
 APP_NAME=SceneVerse AI Backend
-ENVIRONMENT=local
-DATABASE_URL=sqlite:///./data/sceneverse.db
+SCENEVERSE_PROFILE=local
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 FRONTEND_URL=http://localhost:5173
 AWS_REGION=us-east-1
@@ -197,6 +196,11 @@ MEDIA_PUBLIC_PATH=/media
 MEDIA_STORAGE_PREFIX=videos
 S3_VIDEO_BUCKET=
 MEDIA_CDN_BASE_URL=
+
+LOCAL_DATABASE_URL=sqlite:///./data/sceneverse-local.db
+CLOUD_DATABASE_URL=postgresql+psycopg://sceneverse:<password>@<rds-endpoint>:5432/sceneverse
+CLOUD_S3_VIDEO_BUCKET=sceneverse-videos-647526506319-us-east-1
+CLOUD_MEDIA_CDN_BASE_URL=https://d2h4eibmqeyvnj.cloudfront.net
 
 OPENAI_API_KEY=
 EXA_API_KEY=
@@ -626,40 +630,45 @@ curl -X POST http://localhost:8000/api/checkout \
   }'
 ```
 
-## SQLite Storage
+## Database and Storage
 
-Default local database:
+Cloud is the shared source of truth:
 
 ```text
-sqlite:///./data/sceneverse.db
+Database: AWS RDS Postgres
+Media: S3 + CloudFront
+Schema revision: 20260609_0004
 ```
 
-Tables:
+Managed tables:
 
 - `scenes`
 - `characters`
 - `conversation_turns`
 - `research_contexts`
+- `character_sessions`
+- `videos`
+- `alembic_version`
 
-SQLite is good for:
+Local backend development should normally use the cloud database through the SSH tunnel script:
 
-- local development
-- demo persistence
-- controlled hackathon flows
-
-SQLite is not good for:
-
-- multi-instance production APIs
-- durable AWS Lambda local storage
-- high-concurrency writes
-
-For the current AWS EC2 deployment, the container should use:
-
-```text
-sqlite:///./data/sceneverse.db
+```bash
+./scripts/run_cloud_backend_local.sh
 ```
 
-That keeps the container writable, but local container storage is not durable if the instance is replaced. For production, move to DynamoDB or RDS. If you insist on durable SQLite in AWS, mount EFS and point `DATABASE_URL` at that mounted path.
+This points local FastAPI at:
+
+```text
+postgresql+psycopg://...@127.0.0.1:15432/sceneverse
+```
+
+SQLite is still supported only for isolated local experiments:
+
+```bash
+SCENEVERSE_PROFILE=local uvicorn app.main:app --reload
+```
+
+Do not pass SQLite files between teammates. Shared development data belongs in RDS, and uploaded video files belong in S3.
 
 ## Docker
 
@@ -764,9 +773,10 @@ Current AWS deployment target:
 - Root `Dockerfile` using `python:3.13-slim`
 - Public EC2 IP / DNS
 - `/`, `/health`, and `/health/db` health checks
-- SQLite persisted on-host at `/opt/sceneverse-data/sceneverse.db`
+- private AWS RDS Postgres for shared database state
+- S3 bucket plus CloudFront for uploaded video playback
 
-Live deployment as of `2026-06-09`:
+Live deployment as of `2026-06-10`:
 
 ```text
 Base URL: http://18.207.53.115
@@ -781,7 +791,7 @@ Manual CD runbook for EC2:
 2. From the repo root, run:
 
 ```bash
-./infra/aws/deploy-ec2-sync.sh
+./infra/aws/deploy-ec2-with-env.sh
 ```
 
 3. Smoke test:
@@ -842,17 +852,20 @@ AWS_GITHUB_ACTIONS_ROLE_ARN=<printed role arn>
 - Scene analysis uses fallback JSON, not a real vision LLM yet.
 - Research Agent returns an Exa placeholder.
 - Stripe Checkout uses hosted Checkout Sessions when `STRIPE_SECRET_KEY` is configured; otherwise it falls back to simulated unlock URLs.
-- Memory is persisted in SQLite but summarized with deterministic logic.
-- No auth, no user profiles, no creator upload flow.
+- Memory is persisted in Postgres but summarized with deterministic logic.
+- No auth, no user profiles, no production-safe admin layer.
+- `/api/db/{table_name}` is a public debug endpoint and should be protected or removed before production.
 
 ## Next Backend Steps
 
 Recommended order:
 
-1. Wire OpenAI multimodal scene parsing in `agents/scene_parser.py`.
-2. Add strict Pydantic validation for model-generated scene JSON.
-3. Wire Exa in `agents/research_agent.py`.
-4. Persist completed Stripe checkout sessions into an unlock/entitlement table.
-5. Replace or augment SQLite with DynamoDB/RDS for deployed persistence.
-6. Add request logging and basic rate limiting.
-7. Add frontend CORS origin once the deployed frontend URL is known.
+1. Upload real playable demo videos through the admin page.
+2. Wire OpenAI or Bedrock multimodal scene parsing in `agents/scene_parser.py`.
+3. Add strict Pydantic validation for model-generated scene JSON.
+4. Wire Exa in `agents/research_agent.py`.
+5. Persist completed Stripe checkout sessions into an unlock/entitlement table.
+6. Add auth around admin write/delete operations.
+7. Protect or remove `/api/db/{table_name}`.
+8. Add request logging and basic rate limiting.
+9. Add frontend CORS origin once the deployed frontend URL is known.
