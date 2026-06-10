@@ -218,6 +218,7 @@ class SceneParserAgent:
                     franchise=self._clean_string(item.get("franchise")) or self._clean_string(analysis_payload.get("detectedUniverse")),
                     portrayedBy=self._clean_string(item.get("portrayedBy")),
                     identificationConfidence=self._clean_confidence(item.get("confidence")),
+                    box=self._clean_box(item.get("box")),
                 )
             )
 
@@ -264,6 +265,18 @@ class SceneParserAgent:
                     character.knowledgeBoundaries.append(knowledge_note)
             enriched += 1
         return enriched
+
+    def _clean_box(self, value: object) -> list[float] | None:
+        if not isinstance(value, list) or len(value) != 4:
+            return None
+        try:
+            box = [min(1.0, max(0.0, float(coord))) for coord in value]
+        except (TypeError, ValueError):
+            return None
+        left, top, right, bottom = box
+        if right - left < 0.01 or bottom - top < 0.01:
+            return None
+        return [left, top, right, bottom]
 
     def _clean_string(self, value: object) -> str | None:
         if isinstance(value, str):

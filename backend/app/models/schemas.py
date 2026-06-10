@@ -213,6 +213,8 @@ class Character(BaseModel):
     identificationConfidence: Optional[float] = None
     profileSummary: Optional[str] = None
     profileSources: list[CharacterProfileSource] = Field(default_factory=list)
+    # Normalized [left, top, right, bottom] bounding box (0-1) in the analyzed frame.
+    box: Optional[list[float]] = None
 
 
 class NewCharacterSessionRequest(BaseModel):
