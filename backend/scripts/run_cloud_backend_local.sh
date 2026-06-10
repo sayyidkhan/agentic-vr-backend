@@ -123,5 +123,17 @@ export MEDIA_STORAGE_BACKEND=s3
 export FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
 export CORS_ORIGINS="${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}"
 
+if credential_exports="$(
+  AWS_PROFILE="$AWS_PROFILE" AWS_REGION="$AWS_REGION" \
+    aws configure export-credentials --profile "$AWS_PROFILE" --format env
+)"; then
+  # The AWS CLI login profile can resolve credentials that boto3 cannot read
+  # directly. Export short-lived env credentials so local S3 uploads work.
+  eval "$credential_exports"
+else
+  echo "Unable to export AWS credentials for profile ${AWS_PROFILE}; run aws login before starting the backend." >&2
+  exit 1
+fi
+
 echo "Starting local backend on http://${BACKEND_HOST}:${BACKEND_PORT} with cloud Postgres and S3 media"
 "$python_bin" -m uvicorn app.main:app --reload --host "$BACKEND_HOST" --port "$BACKEND_PORT"

@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
 from fastapi import HTTPException, UploadFile
 
 from app.config import Settings
@@ -79,12 +80,26 @@ class VideoStorageService:
             extra_args["ContentType"] = content_type
 
         upload.file.seek(0)
-        boto3.client("s3", region_name=self.settings.aws_region).upload_fileobj(
-            upload.file,
-            bucket,
-            storage_key,
-            ExtraArgs=extra_args or None,
-        )
+        try:
+            boto3.client("s3", region_name=self.settings.aws_region).upload_fileobj(
+                upload.file,
+                bucket,
+                storage_key,
+                ExtraArgs=extra_args or None,
+            )
+        except NoCredentialsError as error:
+            raise HTTPException(
+                status_code=500,
+                detail="AWS credentials are not available for S3 media uploads. Run aws login and restart the backend.",
+            ) from error
+        except ClientError as error:
+            error_code = error.response.get("Error", {}).get("Code", "unknown")
+            raise HTTPException(status_code=502, detail=f"S3 media upload failed: {error_code}") from error
+        except BotoCoreError as error:
+            raise HTTPException(
+                status_code=502,
+                detail=f"S3 media upload failed: {error.__class__.__name__}",
+            ) from error
 
     def _build_storage_key(self, *, video_id: str, suffix: str) -> str:
         prefix = self.settings.media_storage_prefix.strip("/")

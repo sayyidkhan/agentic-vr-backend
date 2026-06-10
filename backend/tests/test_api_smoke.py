@@ -1,12 +1,18 @@
 from io import BytesIO
-from fastapi.testclient import TestClient
+from types import SimpleNamespace
 import uuid
+
+from botocore.exceptions import NoCredentialsError
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+import pytest
 
 import app.main as app_main
 
 from app.config import Settings
 from app.main import app
 from app.models.schemas import AgentTraceStep, AnalyzeSceneResponse, Character, ResearchResponse, ResearchSource, Scene
+from app.services.video_storage import VideoStorageService
 
 
 def test_sceneverse_profile_pairs_database_and_media_storage():
@@ -35,6 +41,27 @@ def test_sceneverse_profile_pairs_database_and_media_storage():
     assert cloud_settings.media_storage_backend == "s3"
     assert cloud_settings.s3_video_bucket == "sceneverse-dev-videos"
     assert cloud_settings.media_cdn_base_url == "https://cdn.example.com"
+
+
+def test_s3_upload_without_credentials_returns_actionable_error(monkeypatch):
+    class StubS3Client:
+        def upload_fileobj(self, *args, **kwargs):
+            raise NoCredentialsError()
+
+    settings = Settings(
+        _env_file=None,
+        sceneverse_profile="cloud",
+        cloud_s3_video_bucket="sceneverse-dev-videos",
+        cloud_media_cdn_base_url="https://cdn.example.com",
+    )
+    monkeypatch.setattr("app.services.video_storage.boto3.client", lambda *args, **kwargs: StubS3Client())
+    upload = SimpleNamespace(filename="demo.mp4", content_type="video/mp4", file=BytesIO(b"0" * 2048))
+
+    with pytest.raises(HTTPException) as error:
+        VideoStorageService(settings).store_upload(upload, video_id="video_test")
+
+    assert error.value.status_code == 500
+    assert "AWS credentials are not available" in error.value.detail
 
 
 def test_scene_chat_research_checkout_flow():
