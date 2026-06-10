@@ -119,6 +119,7 @@ class VideoAsset(BaseModel):
     sourceType: Literal["upload", "youtube", "external_url"]
     title: Optional[str] = None
     description: Optional[str] = None
+    thumbnailUrl: Optional[str] = None
     originalUrl: Optional[str] = None
     originalFilename: Optional[str] = None
     storageBackend: Optional[str] = None
@@ -142,12 +143,14 @@ class CreateVideoLinkRequest(BaseModel):
     url: str = Field(min_length=1)
     title: Optional[str] = None
     description: Optional[str] = None
+    thumbnailUrl: Optional[str] = None
     sourceType: Literal["youtube", "external_url"] = "youtube"
 
 
 class UpdateVideoRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    thumbnailUrl: Optional[str] = None
     status: Optional[str] = None
 
 

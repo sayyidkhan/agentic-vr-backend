@@ -193,6 +193,7 @@ class SQLiteStore:
         source_type: str,
         title: str | None = None,
         description: str | None = None,
+        thumbnail_url: str | None = None,
     ) -> VideoAsset:
         duplicate = self.find_video_by_reference(url)
         if duplicate is not None:
@@ -203,6 +204,7 @@ class SQLiteStore:
             source_type=source_type,
             title=title,
             description=description,
+            thumbnail_url=self._empty_string_to_none(thumbnail_url),
             original_url=url,
             status="ready",
         )
@@ -217,6 +219,7 @@ class SQLiteStore:
         video_id: str,
         title: str | None,
         description: str | None,
+        thumbnail_url: str | None,
         original_filename: str | None,
         storage_backend: str,
         storage_key: str,
@@ -233,6 +236,7 @@ class SQLiteStore:
             source_type="upload",
             title=title,
             description=description,
+            thumbnail_url=self._empty_string_to_none(thumbnail_url),
             original_filename=original_filename,
             storage_backend=storage_backend,
             storage_key=storage_key,
@@ -274,6 +278,8 @@ class SQLiteStore:
             record.title = self._empty_string_to_none(changes["title"])
         if "description" in changes:
             record.description = self._empty_string_to_none(changes["description"])
+        if "thumbnailUrl" in changes:
+            record.thumbnail_url = self._empty_string_to_none(changes["thumbnailUrl"])
         if "sourceType" in changes and changes["sourceType"] is not None:
             record.source_type = str(changes["sourceType"])
         if "originalUrl" in changes:
@@ -330,6 +336,7 @@ class SQLiteStore:
             sourceType=record.source_type,
             title=record.title,
             description=record.description,
+            thumbnailUrl=record.thumbnail_url,
             originalUrl=record.original_url,
             originalFilename=record.original_filename,
             storageBackend=record.storage_backend,

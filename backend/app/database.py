@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-CURRENT_SCHEMA_REVISION = "20260609_0004"
+CURRENT_SCHEMA_REVISION = "20260610_0005"
 MANAGED_TABLES = {"scenes", "characters", "conversation_turns", "research_contexts", "character_sessions", "videos"}
 
 is_sqlite = settings.database_url.startswith("sqlite")
@@ -51,6 +51,8 @@ def _ensure_additive_schema() -> None:
     statements = []
     if "description" not in video_columns:
         statements.append("ALTER TABLE videos ADD COLUMN description TEXT")
+    if "thumbnail_url" not in video_columns:
+        statements.append("ALTER TABLE videos ADD COLUMN thumbnail_url TEXT")
 
     if not statements:
         return

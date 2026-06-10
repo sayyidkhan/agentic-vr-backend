@@ -26,6 +26,7 @@ class StoredVideo:
 
 class VideoStorageService:
     allowed_extensions = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
+    allowed_thumbnail_extensions = {".jpg", ".jpeg", ".png", ".webp"}
     minimum_video_file_bytes = 1024
 
     def __init__(self, settings: Settings) -> None:
@@ -45,6 +46,45 @@ class VideoStorageService:
             raise HTTPException(status_code=400, detail="Uploaded video file is too small to be playable")
 
         storage_key = self._build_storage_key(video_id=video_id, suffix=suffix)
+
+        if self.settings.media_storage_backend == "s3":
+            self._store_s3(upload=upload, storage_key=storage_key, content_type=content_type)
+            playback_url = self._s3_playback_url(storage_key)
+            return StoredVideo(
+                storage_backend="s3",
+                storage_key=storage_key,
+                playback_url=playback_url,
+                content_type=content_type,
+                file_size_bytes=file_size_bytes,
+            )
+
+        self._store_local(upload=upload, storage_key=storage_key)
+        playback_url = self._local_playback_url(storage_key)
+        return StoredVideo(
+            storage_backend="local",
+            storage_key=storage_key,
+            playback_url=playback_url,
+            content_type=content_type,
+            file_size_bytes=file_size_bytes,
+        )
+
+    def store_thumbnail(self, upload: UploadFile, *, video_id: str) -> StoredVideo:
+        if not upload.filename:
+            raise HTTPException(status_code=400, detail="Thumbnail upload must include a filename")
+
+        suffix = Path(upload.filename).suffix.lower() or self._suffix_for_thumbnail_content_type(upload.content_type)
+        if suffix not in self.allowed_thumbnail_extensions:
+            raise HTTPException(status_code=400, detail=f"Unsupported thumbnail file extension: {suffix or 'none'}")
+
+        content_type = upload.content_type or self._content_type_for_suffix(suffix)
+        if not content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Thumbnail upload must be an image file")
+
+        file_size_bytes = self._get_file_size(upload)
+        if file_size_bytes == 0:
+            raise HTTPException(status_code=400, detail="Thumbnail upload cannot be empty")
+
+        storage_key = self._build_thumbnail_storage_key(video_id=video_id, suffix=suffix)
 
         if self.settings.media_storage_backend == "s3":
             self._store_s3(upload=upload, storage_key=storage_key, content_type=content_type)
@@ -109,6 +149,11 @@ class VideoStorageService:
         prefix = self.settings.media_storage_prefix.strip("/")
         filename = f"{video_id}{suffix or '.mp4'}"
         return f"{prefix}/{filename}" if prefix else filename
+
+    def _build_thumbnail_storage_key(self, *, video_id: str, suffix: str) -> str:
+        prefix = self.settings.media_storage_prefix.strip("/")
+        filename = f"{video_id}{suffix or '.jpg'}"
+        return f"{prefix}/thumbnails/{filename}" if prefix else f"thumbnails/{filename}"
 
     def _s3_client(self):
         cli_credentials = self._fresh_cli_login_credentials()
@@ -191,4 +236,16 @@ class VideoStorageService:
             ".m4v": "video/x-m4v",
             ".webm": "video/webm",
             ".mkv": "video/x-matroska",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
         }.get(suffix, "application/octet-stream")
+
+    @staticmethod
+    def _suffix_for_thumbnail_content_type(content_type: str | None) -> str:
+        return {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+        }.get((content_type or "").split(";")[0].strip().lower(), "")

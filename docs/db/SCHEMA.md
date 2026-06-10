@@ -9,7 +9,7 @@ Source of truth:
 
 Current schema revision:
 
-- `20260609_0004`
+- `20260610_0005`
 
 Current managed tables:
 
@@ -176,6 +176,7 @@ Columns:
 | `source_type` | `String(32)` | No | Indexed | `upload`, `youtube`, or external source type |
 | `title` | `String(255)` | Yes |  | Catalogue title |
 | `description` | `Text` | Yes |  | Short catalogue/admin description |
+| `thumbnail_url` | `Text` | Yes |  | Optional catalogue thumbnail override URL, either external or stored media |
 | `original_url` | `Text` | Yes |  | External/YouTube source URL |
 | `original_filename` | `String(255)` | Yes |  | Original uploaded filename |
 | `storage_backend` | `String(32)` | Yes |  | `s3` or `local` |

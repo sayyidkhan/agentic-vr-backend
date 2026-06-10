@@ -346,6 +346,7 @@ def test_scene_chat_research_checkout_flow():
                     "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                     "title": "Reference Clip",
                     "description": "Reference material for admin preview.",
+                    "thumbnailUrl": "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
                     "sourceType": "youtube",
                 },
             )
@@ -353,6 +354,7 @@ def test_scene_chat_research_checkout_flow():
             linked_video_data = linked_video.json()
             assert linked_video_data["sourceType"] == "youtube"
             assert linked_video_data["description"] == "Reference material for admin preview."
+            assert linked_video_data["thumbnailUrl"] == "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
             assert linked_video_data["originalUrl"].startswith("https://www.youtube.com/")
 
             duplicate_linked_video = client.post(
@@ -366,15 +368,35 @@ def test_scene_chat_research_checkout_flow():
             assert duplicate_linked_video.status_code == 409
             assert linked_video_data["videoId"] in duplicate_linked_video.json()["detail"]
 
+            linked_thumbnail_upload = client.post(
+                f"/api/admin/videos/{linked_video_data['videoId']}/thumbnail",
+                files={"file": ("reference-poster.png", BytesIO(b"fake-png-thumbnail"), "image/png")},
+            )
+            assert linked_thumbnail_upload.status_code == 200
+            linked_thumbnail_data = linked_thumbnail_upload.json()
+            assert linked_thumbnail_data["thumbnailUrl"].endswith(
+                f"/videos/thumbnails/{linked_video_data['videoId']}.png"
+            )
+
             uploaded_video = client.post(
                 "/api/videos/upload",
-                data={"title": "Uploaded Demo Clip", "description": "Uploaded local media for QA."},
-                files={"file": ("demo.mp4", BytesIO(b"0" * 2048), "video/mp4")},
+                data={
+                    "title": "Uploaded Demo Clip",
+                    "description": "Uploaded local media for QA.",
+                    "thumbnailUrl": "https://cdn.example.com/thumbs/uploaded-demo.jpg",
+                },
+                files={
+                    "file": ("demo.mp4", BytesIO(b"0" * 2048), "video/mp4"),
+                    "thumbnailFile": ("uploaded-poster.webp", BytesIO(b"fake-webp-thumbnail"), "image/webp"),
+                },
             )
             assert uploaded_video.status_code == 201
             uploaded_video_data = uploaded_video.json()
             assert uploaded_video_data["sourceType"] == "upload"
             assert uploaded_video_data["description"] == "Uploaded local media for QA."
+            assert uploaded_video_data["thumbnailUrl"].endswith(
+                f"/videos/thumbnails/{uploaded_video_data['videoId']}.webp"
+            )
             assert uploaded_video_data["storageBackend"] == app_main.settings.media_storage_backend
             assert uploaded_video_data["playbackUrl"]
 
@@ -392,12 +414,14 @@ def test_scene_chat_research_checkout_flow():
                 json={
                     "title": "Updated Demo Clip",
                     "description": "Updated catalogue description.",
+                    "thumbnailUrl": "https://cdn.example.com/thumbs/updated-demo.jpg",
                     "status": "draft",
                 },
             )
             assert updated_video.status_code == 200
             assert updated_video.json()["title"] == "Updated Demo Clip"
             assert updated_video.json()["description"] == "Updated catalogue description."
+            assert updated_video.json()["thumbnailUrl"] == "https://cdn.example.com/thumbs/updated-demo.jpg"
             assert updated_video.json()["status"] == "draft"
 
             video_rows = client.get("/api/db/videos", params={"limit": 2})

@@ -110,7 +110,7 @@ docker logs --tail=100 sceneverse-backend
 ## Database And Media
 
 - SQLite to RDS Postgres migration is complete.
-- Current DB health should report `postgresql+psycopg`, environment `cloud`, schema revision `20260609_0004`.
+- Current DB health should report `postgresql+psycopg`, environment `cloud`, schema revision `20260610_0005`.
 - RDS credentials are stored in AWS Secrets Manager under `sceneverse/rds/postgres`.
 - Local backend development reaches private RDS through `backend/scripts/run_cloud_backend_local.sh`.
 - Video files are stored in S3, and playback URLs use CloudFront.

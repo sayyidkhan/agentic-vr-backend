@@ -11,7 +11,7 @@ This document reflects the current backend stack after the SQLite to AWS RDS Pos
 | Runtime | Python 3.13 | Root `Dockerfile` and backend venv target Python 3.13. |
 | API | FastAPI + Pydantic | OpenAPI docs exposed at `/docs`. |
 | ORM | SQLAlchemy 2.x | Shared abstraction for Postgres and local SQLite fallback. |
-| Migrations | Alembic | Current schema revision: `20260609_0004`. |
+| Migrations | Alembic | Current schema revision: `20260610_0005`. |
 | Cloud database | AWS RDS Postgres | Live shared source of truth. Private, not publicly accessible. |
 | Local fallback DB | SQLite | Kept only for isolated local backend experiments and rollback backup. |
 | Video metadata | RDS Postgres | `videos` table stores catalogue rows and media pointers. |
@@ -105,7 +105,7 @@ Expected DB health:
 ```text
 database: postgresql+psycopg
 environment: cloud
-schemaRevision: 20260609_0004
+schemaRevision: 20260610_0005
 ```
 
 ## Local SQLite Fallback
@@ -146,7 +146,7 @@ Current migration status:
 
 ```text
 SQLite -> RDS Postgres migration complete
-Schema revision: 20260609_0004
+Schema revision: 20260610_0005
 ```
 
 Migrated row counts at cutover:

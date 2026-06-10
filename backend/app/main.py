@@ -271,6 +271,7 @@ def create_video_link(payload: CreateVideoLinkRequest, db: Session = Depends(get
             source_type=payload.sourceType,
             title=payload.title,
             description=payload.description,
+            thumbnail_url=payload.thumbnailUrl,
         )
     except DuplicateVideoReferenceError as error:
         raise HTTPException(
@@ -284,15 +285,24 @@ def upload_video(
     file: UploadFile = File(...),
     title: str | None = Form(default=None),
     description: str | None = Form(default=None),
+    thumbnailUrl: str | None = Form(default=None),
+    thumbnailFile: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
 ) -> VideoAsset:
     video_id = f"video_{uuid4().hex[:12]}"
-    stored_video = VideoStorageService(settings).store_upload(file, video_id=video_id)
+    storage = VideoStorageService(settings)
+    stored_video = storage.store_upload(file, video_id=video_id)
+    stored_thumbnail = (
+        storage.store_thumbnail(thumbnailFile, video_id=video_id)
+        if thumbnailFile is not None and thumbnailFile.filename
+        else None
+    )
     try:
         return SQLiteStore(db).create_uploaded_video(
             video_id=video_id,
             title=title,
             description=description,
+            thumbnail_url=stored_thumbnail.playback_url if stored_thumbnail is not None else thumbnailUrl,
             original_filename=file.filename,
             storage_backend=stored_video.storage_backend,
             storage_key=stored_video.storage_key,
@@ -305,6 +315,23 @@ def upload_video(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Video reference already exists as {error.video_id}",
         ) from error
+
+
+@app.post("/api/admin/videos/{video_id}/thumbnail", response_model=VideoAsset)
+def upload_admin_video_thumbnail(
+    video_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> VideoAsset:
+    store = SQLiteStore(db)
+    if store.get_video(video_id) is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    stored_thumbnail = VideoStorageService(settings).store_thumbnail(file, video_id=video_id)
+    video = store.update_video(video_id, {"thumbnailUrl": stored_thumbnail.playback_url})
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return video
 
 
 @app.patch("/api/admin/videos/{video_id}", response_model=VideoAsset)

@@ -93,6 +93,7 @@ class VideoRecord(Base):
     source_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text)
+    thumbnail_url: Mapped[str | None] = mapped_column(Text)
     original_url: Mapped[str | None] = mapped_column(Text)
     original_filename: Mapped[str | None] = mapped_column(String(255))
     storage_backend: Mapped[str | None] = mapped_column(String(32))

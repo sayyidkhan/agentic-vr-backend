@@ -637,7 +637,7 @@ Cloud is the shared source of truth:
 ```text
 Database: AWS RDS Postgres
 Media: S3 + CloudFront
-Schema revision: 20260609_0004
+Schema revision: 20260610_0005
 ```
 
 Managed tables:
