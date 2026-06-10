@@ -1,0 +1,23 @@
+{
+  "defaultSpeechmaticsVoiceId": "jack",
+  "characters": [
+    {
+      "character": "yoda",
+      "label": "Yoda",
+      "provider": "elevenlabs",
+      "voiceId": "IVEX784MKkjr9nEHMibz",
+      "predefinedText": "Ready for the demo, we are. Strong with SceneVerse, this experience is.",
+      "aliases": [],
+      "enabled": true
+    },
+    {
+      "character": "vader",
+      "label": "Darth Vader",
+      "provider": "elevenlabs",
+      "voiceId": "7oa7pPaxPaXjMQXRCP8y",
+      "predefinedText": "The scene is now under my command. Do not underestimate the power of this experience.",
+      "aliases": ["darth vader"],
+      "enabled": true
+    }
+  ]
+}

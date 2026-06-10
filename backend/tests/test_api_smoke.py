@@ -55,18 +55,14 @@ def test_sceneverse_profile_pairs_database_and_media_storage():
     speech_settings = Settings(
         _env_file=None,
         elevenlabs_api_key="test-key",
-        elevenlabs_yoda_voice_id="voice-yoda",
-        elevenlabs_vader_voice_id="voice-vader",
         speechmatics_api_key="speechmatics-key",
     )
     assert speech_settings.elevenlabs_api_key == "test-key"
     assert speech_settings.elevenlabs_tts_model_id == "eleven_multilingual_v2"
     assert speech_settings.elevenlabs_output_format == "mp3_44100_128"
-    assert speech_settings.elevenlabs_yoda_voice_id == "voice-yoda"
-    assert speech_settings.elevenlabs_vader_voice_id == "voice-vader"
     assert speech_settings.speechmatics_api_key == "speechmatics-key"
     assert speech_settings.speechmatics_tts_output_format == "wav_16000"
-    assert speech_settings.speechmatics_tts_voice_id == "jack"
+    assert speech_settings.voice_registry_path == "app/data/voice_registry.json"
 
 
 def test_s3_upload_without_credentials_returns_actionable_error(monkeypatch):

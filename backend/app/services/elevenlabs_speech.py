@@ -9,22 +9,12 @@ from urllib.request import Request, urlopen
 
 from app.config import Settings
 from app.models.schemas import SpeechCharacterPreset
+from app.services.voice_registry import VoiceRegistryService
 
 try:
     import certifi
 except ImportError:  # pragma: no cover - certifi is expected through requests/httpx dependencies.
     certifi = None
-
-
-CHARACTER_SCRIPTS: dict[str, str] = {
-    "yoda": "Ready for the demo, we are. Strong with SceneVerse, this experience is.",
-    "vader": "The scene is now under my command. Do not underestimate the power of this experience.",
-}
-
-CHARACTER_LABELS: dict[str, str] = {
-    "yoda": "Yoda",
-    "vader": "Darth Vader",
-}
 
 
 @dataclass(frozen=True)
@@ -69,24 +59,29 @@ class ElevenLabsSpeechError(Exception):
 class ElevenLabsSpeechService:
     base_url = "https://api.elevenlabs.io/v1/text-to-speech"
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, voice_registry: VoiceRegistryService) -> None:
         self.settings = settings
+        self.voice_registry = voice_registry
         self._ssl_context = self._create_ssl_context()
 
     def list_character_presets(self) -> list[SpeechCharacterPreset]:
         return [
             SpeechCharacterPreset(
-                character=character,
-                label=CHARACTER_LABELS[character],
-                predefinedText=CHARACTER_SCRIPTS[character],
-                voiceIdConfigured=self._voice_id_for(character) is not None,
+                character=entry.character,
+                label=entry.label,
+                predefinedText=entry.predefinedText or "",
+                voiceIdConfigured=self._voice_id_for(entry.character) is not None,
             )
-            for character in CHARACTER_SCRIPTS
+            for entry in self.voice_registry.list_characters_for_provider("elevenlabs")
+            if entry.predefinedText
         ]
 
     def synthesize_predefined(self, character: str) -> SpeechAudio:
         normalized_character = self._normalize_character(character)
-        return self.synthesize(character=normalized_character, text=CHARACTER_SCRIPTS[normalized_character])
+        predefined_text = self.voice_registry.predefined_text_for(normalized_character)
+        if not predefined_text:
+            raise ValueError(f"No predefined speech line configured for '{character}'")
+        return self.synthesize(character=normalized_character, text=predefined_text)
 
     def synthesize(self, character: str, text: str) -> SpeechAudio:
         normalized_character = self._normalize_character(character)
@@ -100,8 +95,9 @@ class ElevenLabsSpeechService:
 
         voice_id = self._voice_id_for(normalized_character)
         if not voice_id:
-            env_name = f"ELEVENLABS_{normalized_character.upper()}_VOICE_ID"
-            raise ElevenLabsConfigurationError(f"{env_name} is not configured")
+            raise ElevenLabsConfigurationError(
+                f"No ElevenLabs voiceId configured for '{normalized_character}' in {self.settings.voice_registry_path}"
+            )
 
         output_format = self.settings.elevenlabs_output_format
         query = urlencode({"output_format": output_format})
@@ -145,21 +141,20 @@ class ElevenLabsSpeechService:
             raise ElevenLabsSpeechError("ElevenLabs request timed out") from exc
 
     def _voice_id_for(self, character: str) -> str | None:
-        voices = {
-            "yoda": self.settings.elevenlabs_yoda_voice_id,
-            "vader": self.settings.elevenlabs_vader_voice_id,
-        }
-        voice_id = voices.get(character)
-        if voice_id is None:
+        entry = self.voice_registry.resolve(character)
+        if entry is None or entry.provider != "elevenlabs":
             return None
-        return voice_id.strip() or None
+        voice_id = entry.voiceId.strip()
+        return voice_id or None
 
     def _normalize_character(self, character: str) -> str:
-        normalized = character.strip().lower()
-        if normalized not in CHARACTER_SCRIPTS:
-            supported = ", ".join(sorted(CHARACTER_SCRIPTS))
-            raise ValueError(f"Unsupported speech character '{character}'. Supported characters: {supported}")
-        return normalized
+        entry = self.voice_registry.resolve(character)
+        if entry is None or entry.provider != "elevenlabs":
+            supported = ", ".join(
+                sorted(entry.character for entry in self.voice_registry.list_characters_for_provider("elevenlabs"))
+            )
+            raise ValueError(f"Unsupported ElevenLabs speech character '{character}'. Supported characters: {supported}")
+        return entry.character
 
     def _create_ssl_context(self) -> ssl.SSLContext:
         if certifi is None:

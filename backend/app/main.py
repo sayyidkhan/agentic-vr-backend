@@ -42,6 +42,7 @@ from app.models.schemas import (
     ModelProbeResponse,
     RealtimeTranscriptionTokenResponse,
     SpeechCharacterListResponse,
+    SpeechCharacterPreset,
     SpeechSynthesisRequest,
     VideoAsset,
     VideoListResponse,
@@ -66,6 +67,7 @@ from app.services.speechmatics_speech import (
     SpeechmaticsSpeechError,
     SpeechmaticsSpeechService,
 )
+from app.services.voice_registry import VoiceRegistryService
 from app.services.video_storage import VideoStorageService
 from app.store.sqlite_store import DuplicateVideoReferenceError, SQLiteStore
 
@@ -97,8 +99,9 @@ bedrock_runtime = BedrockRuntimeService(settings=settings)
 model_runtime = ModelRuntimeService(settings=settings)
 checkout_service = CheckoutService(settings=settings)
 openai_realtime_service = OpenAIRealtimeService(settings=settings)
-elevenlabs_speech_service = ElevenLabsSpeechService(settings=settings)
-speechmatics_speech_service = SpeechmaticsSpeechService(settings=settings)
+voice_registry = VoiceRegistryService(settings=settings)
+elevenlabs_speech_service = ElevenLabsSpeechService(settings=settings, voice_registry=voice_registry)
+speechmatics_speech_service = SpeechmaticsSpeechService(settings=settings, voice_registry=voice_registry)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -154,15 +157,36 @@ def _speech_audio_response(audio) -> Response:
     )
 
 
-def _is_primary_elevenlabs_character(character: str) -> bool:
-    return character.strip().lower() in {"yoda", "vader", "darth vader"}
+def _is_elevenlabs_character(character: str) -> bool:
+    return voice_registry.provider_for(character) == "elevenlabs"
 
 
-def _normalize_primary_character(character: str) -> str:
+def _normalize_speech_character(character: str) -> str:
+    entry = voice_registry.resolve(character)
+    if entry is not None:
+        return entry.character
     normalized = character.strip().lower()
     if normalized == "darth vader":
         return "vader"
     return normalized
+
+
+def _synthesize_speech(character: str, text: str | None) -> Response:
+    if _is_elevenlabs_character(character):
+        normalized_character = _normalize_speech_character(character)
+        if text is None:
+            return _speech_audio_response(elevenlabs_speech_service.synthesize_predefined(normalized_character))
+        return _speech_audio_response(
+            elevenlabs_speech_service.synthesize(character=normalized_character, text=text)
+        )
+
+    if text is None:
+        predefined = voice_registry.predefined_text_for(character)
+        if predefined:
+            return _speech_audio_response(speechmatics_speech_service.synthesize_predefined(character))
+        raise ValueError("Custom character speech requires text")
+
+    return _speech_audio_response(speechmatics_speech_service.synthesize(character=character, text=text))
 
 
 def _speechmatics_error_response(exc: Exception) -> HTTPException:
@@ -176,15 +200,24 @@ def _speechmatics_error_response(exc: Exception) -> HTTPException:
 @app.get("/api/speech/characters", response_model=SpeechCharacterListResponse)
 def list_speech_characters() -> SpeechCharacterListResponse:
     speechmatics_ready = bool(settings.speechmatics_api_key)
+    elevenlabs_ready = bool(settings.elevenlabs_api_key)
+    presets = []
+    for entry in voice_registry.list_preset_characters():
+        provider_ready = elevenlabs_ready if entry.provider == "elevenlabs" else speechmatics_ready
+        presets.append(
+            SpeechCharacterPreset(
+                character=entry.character,
+                label=entry.label,
+                predefinedText=entry.predefinedText or "",
+                voiceIdConfigured=bool(entry.voiceId.strip()) and provider_ready,
+            )
+        )
     return SpeechCharacterListResponse(
         provider="hybrid" if speechmatics_ready else "elevenlabs",
         modelId=f"{settings.elevenlabs_tts_model_id}+speechmatics-preview-tts",
         outputFormat=f"{settings.elevenlabs_output_format}|{settings.speechmatics_tts_output_format}",
         apiKeyConfigured=bool(settings.elevenlabs_api_key or settings.speechmatics_api_key),
-        characters=[
-            preset.model_copy(update={"voiceIdConfigured": preset.voiceIdConfigured or speechmatics_ready})
-            for preset in elevenlabs_speech_service.list_character_presets()
-        ],
+        characters=presets,
     )
 
 
@@ -426,29 +459,21 @@ def speech_test_page() -> str:
 @app.post("/api/speech/predefined/{character}")
 def create_predefined_speech(character: str) -> Response:
     try:
-        return _speech_audio_response(elevenlabs_speech_service.synthesize_predefined(_normalize_primary_character(character)))
+        return _synthesize_speech(character, text=None)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ElevenLabsConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ElevenLabsSpeechError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except (SpeechmaticsConfigurationError, SpeechmaticsSpeechError) as exc:
+        raise _speechmatics_error_response(exc) from exc
 
 
 @app.post("/api/speech/synthesize")
 def synthesize_speech(payload: SpeechSynthesisRequest) -> Response:
     try:
-        if _is_primary_elevenlabs_character(payload.character):
-            character = _normalize_primary_character(payload.character)
-            if payload.text is None:
-                return _speech_audio_response(elevenlabs_speech_service.synthesize_predefined(character))
-            return _speech_audio_response(elevenlabs_speech_service.synthesize(character=character, text=payload.text))
-
-        if payload.text is None:
-            raise ValueError("Custom character speech requires text")
-        return _speech_audio_response(
-            speechmatics_speech_service.synthesize(character=payload.character, text=payload.text)
-        )
+        return _synthesize_speech(payload.character, payload.text)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ElevenLabsConfigurationError as exc:

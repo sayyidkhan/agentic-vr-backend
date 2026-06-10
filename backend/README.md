@@ -185,6 +185,7 @@ AWS_REGION=us-east-1
 BEDROCK_REGION=us-east-1
 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
 MODEL_REGISTRY_PATH=app/data/enabled_models.json
+VOICE_REGISTRY_PATH=app/data/voice_registry.json
 ENABLE_LIVE_SCENE_ANALYSIS=false
 SCENE_ANALYSIS_MODEL_ID=global.anthropic.claude-sonnet-4-6
 ENABLE_EXA_CHARACTER_ENRICHMENT=true
@@ -206,12 +207,9 @@ CLOUD_MEDIA_CDN_BASE_URL=https://d2h4eibmqeyvnj.cloudfront.net
 OPENAI_API_KEY=
 SPEECHMATICS_API_KEY=
 SPEECHMATICS_TTS_OUTPUT_FORMAT=wav_16000
-SPEECHMATICS_TTS_VOICE_ID=jack
 ELEVENLABS_API_KEY=
 ELEVENLABS_TTS_MODEL_ID=eleven_multilingual_v2
 ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
-ELEVENLABS_YODA_VOICE_ID=IVEX784MKkjr9nEHMibz
-ELEVENLABS_VADER_VOICE_ID=7oa7pPaxPaXjMQXRCP8y
 EXA_API_KEY=
 YTDLP_COOKIES_FILE=
 YTDLP_USER_AGENT=
@@ -226,9 +224,9 @@ AWS_BEARER_TOKEN_BEDROCK=
 Current behavior:
 
 - `OPENAI_API_KEY` is only needed if you later add OpenAI-hosted models back into the registry.
-- `SPEECHMATICS_API_KEY` enables Speechmatics Text to Speech for non-Yoda/Vader characters.
-- `ELEVENLABS_API_KEY` enables `/api/speech/*` audio generation.
-- `ELEVENLABS_YODA_VOICE_ID` and `ELEVENLABS_VADER_VOICE_ID` map the Yoda/Vader presets to the generated ElevenLabs voices named `Yoda` and `Darth`.
+- `SPEECHMATICS_API_KEY` enables Speechmatics Text to Speech for characters not routed to ElevenLabs.
+- `ELEVENLABS_API_KEY` enables `/api/speech/*` audio generation for ElevenLabs-routed characters.
+- Character voice IDs and Speechmatics defaults live in `app/data/voice_registry.json` (override with `VOICE_REGISTRY_PATH`).
 - `ELEVENLABS_TTS_MODEL_ID` defaults to `eleven_multilingual_v2`.
 - `ELEVENLABS_OUTPUT_FORMAT` defaults to `mp3_44100_128`.
 - `EXA_API_KEY` is used by live scene-analysis character enrichment and `/api/research`.
@@ -239,6 +237,7 @@ Current behavior:
 - `STRIPE_WEBHOOK_SECRET` verifies signed events sent to `/api/webhooks/stripe`.
 - Empty Stripe keys return a simulated unlock URL.
 - `MODEL_REGISTRY_PATH` points to the enabled multi-model config file.
+- `VOICE_REGISTRY_PATH` points to the speech voice registry file.
 - `ENABLE_LIVE_SCENE_ANALYSIS=true` turns on Bedrock vision parsing for `/api/scenes/analyze`.
 - `SCENE_ANALYSIS_MODEL_ID` controls the Bedrock vision model used for scene parsing.
 - `ENABLE_LIVE_CHARACTER_CHAT=true` turns on Bedrock-backed character voice generation.
@@ -266,14 +265,16 @@ Interactive browser frame capture requires an HTML5-playable `playbackUrl`. YouT
 
 ## Speech APIs
 
-The speech endpoints are wired for ElevenLabs Text to Speech and start with predefined demo lines:
+The speech endpoints are wired for ElevenLabs Text to Speech and Speechmatics TTS. Voice IDs and demo lines are configured in [`app/data/voice_registry.json`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/backend/app/data/voice_registry.json):
 
-- `GET /api/speech/characters` returns the Yoda/Vader presets and whether each voice ID is configured.
+- `GET /api/speech/characters` returns configured character presets and whether each voice ID is ready.
 - `POST /api/speech/predefined/yoda` returns an audio file for the Yoda demo line.
 - `POST /api/speech/predefined/vader` returns an audio file for the Vader demo line.
 - `POST /api/speech/synthesize` accepts `{"character":"yoda","text":"custom line"}`; omit `text` to use the predefined line.
 
-Until `ELEVENLABS_API_KEY` and the relevant `ELEVENLABS_*_VOICE_ID` are present, audio generation returns `503`
+Add new characters by appending entries to `voice_registry.json` with `provider`, `voiceId`, and optional `predefinedText`. Unlisted characters fall back to Speechmatics using `defaultSpeechmaticsVoiceId`.
+
+Until the relevant API key and voice registry entry are present, audio generation returns `503`
 with the missing setting name.
 
 ## Database Migrations

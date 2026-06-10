@@ -7,7 +7,8 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.config import Settings
-from app.services.elevenlabs_speech import CHARACTER_SCRIPTS, SpeechAudio
+from app.services.elevenlabs_speech import SpeechAudio
+from app.services.voice_registry import VoiceRegistryService
 
 try:
     import certifi
@@ -29,13 +30,16 @@ class SpeechmaticsSpeechService:
     base_url = "https://preview.tts.speechmatics.com/generate"
     model_id = "speechmatics-preview-tts"
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, voice_registry: VoiceRegistryService) -> None:
         self.settings = settings
+        self.voice_registry = voice_registry
         self._ssl_context = self._create_ssl_context()
 
     def synthesize_predefined(self, character: str) -> SpeechAudio:
-        normalized_character = self._normalize_character(character)
-        return self.synthesize(character=normalized_character, text=CHARACTER_SCRIPTS[normalized_character])
+        predefined_text = self.voice_registry.predefined_text_for(character)
+        if not predefined_text:
+            raise ValueError(f"No predefined speech line configured for '{character}'")
+        return self.synthesize(character=character, text=predefined_text)
 
     def synthesize(self, character: str, text: str) -> SpeechAudio:
         normalized_character = self._normalize_character_name(character)
@@ -47,9 +51,11 @@ class SpeechmaticsSpeechService:
         if not api_key:
             raise SpeechmaticsConfigurationError("SPEECHMATICS_API_KEY is not configured")
 
-        voice_id = self.settings.speechmatics_tts_voice_id.strip()
+        voice_id = self.voice_registry.speechmatics_voice_id_for(character).strip()
         if not voice_id:
-            raise SpeechmaticsConfigurationError("SPEECHMATICS_TTS_VOICE_ID is not configured")
+            raise SpeechmaticsConfigurationError(
+                f"No Speechmatics voiceId configured for '{character}' in {self.settings.voice_registry_path}"
+            )
         output_format = self.settings.speechmatics_tts_output_format
         query = urlencode({"output_format": output_format})
         request = Request(
@@ -82,14 +88,10 @@ class SpeechmaticsSpeechService:
         except TimeoutError as exc:
             raise SpeechmaticsSpeechError("Speechmatics TTS request timed out") from exc
 
-    def _normalize_character(self, character: str) -> str:
-        normalized = character.strip().lower()
-        if normalized not in CHARACTER_SCRIPTS:
-            supported = ", ".join(sorted(CHARACTER_SCRIPTS))
-            raise ValueError(f"Unsupported speech character '{character}'. Supported characters: {supported}")
-        return normalized
-
     def _normalize_character_name(self, character: str) -> str:
+        entry = self.voice_registry.resolve(character)
+        if entry is not None:
+            return entry.character
         normalized = character.strip().lower().replace(" ", "_")
         if not normalized:
             raise ValueError("Speech character must not be empty")
