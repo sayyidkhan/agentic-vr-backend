@@ -8,7 +8,7 @@ The backend is intentionally scoped for a hackathon MVP:
 pause video -> analyze scene -> create agents -> chat with memory -> show orchestration trace
 ```
 
-It currently uses SQLite for MVP persistence, with optional live Bedrock scene analysis and Exa-backed research/profile enrichment.
+It uses AWS RDS Postgres for shared cloud persistence and keeps SQLite available for explicit local-only backend development.
 
 ## What This Backend Does
 
@@ -17,8 +17,8 @@ It currently uses SQLite for MVP persistence, with optional live Bedrock scene a
 - Creates character cards with goals, emotional state, and knowledge boundaries.
 - Routes chat through a lightweight orchestrator.
 - Supports Character Agent, Director Agent, Memory Agent, and Exa-backed Research Agent flows.
-- Persists scene state, characters, conversation turns, and research summaries in SQLite.
-- Persists uploaded videos and external video references in SQLite.
+- Persists scene state, characters, conversation turns, and research summaries in SQLAlchemy-backed storage.
+- Persists uploaded video metadata and external video references in the database while media files live locally or in S3.
 - Returns `agentTrace` arrays so the frontend can show visible multi-agent coordination.
 - Provides a simulated Stripe unlock path until real Stripe Checkout is wired.
 
@@ -29,7 +29,8 @@ It currently uses SQLite for MVP persistence, with optional live Bedrock scene a
 - Pydantic
 - SQLAlchemy
 - Alembic
-- SQLite for MVP persistence
+- AWS RDS Postgres for shared cloud persistence
+- SQLite for explicit local-only backend persistence
 - Local or S3-backed media storage for uploaded videos
 - Docker for local and AWS EC2 runtime
 - Mangum for optional AWS Lambda deployment
@@ -106,18 +107,19 @@ pip install -r requirements-dev.txt
 cp .env.example .env
 ```
 
-The default profile is local:
+The default backend-local profile is local:
 
 ```env
 SCENEVERSE_PROFILE=local
 ```
 
-That resolves to local SQLite and local media files. For ECS/cloud, switch the same key to `cloud`; the backend
-then resolves to ECS SQLite plus S3 media settings:
+That resolves to local SQLite and local media files. The normal team workflow does not run the backend locally;
+the frontend points to the EC2 API, which uses private RDS Postgres and S3/CloudFront media. For EC2/cloud runtime,
+switch the same key to `cloud` and provide the private RDS URL:
 
 ```env
 SCENEVERSE_PROFILE=cloud
-CLOUD_DATABASE_URL=sqlite:///./data/sceneverse.db
+CLOUD_DATABASE_URL=postgresql+psycopg://sceneverse:<password>@<rds-endpoint>:5432/sceneverse
 CLOUD_S3_VIDEO_BUCKET=<dev-or-prod-video-bucket>
 ```
 
@@ -213,7 +215,7 @@ The backend exposes a minimal video/media surface for hackathon use:
 
 ## Database Migrations
 
-The project uses Alembic on top of SQLAlchemy so the current SQLite schema can later be promoted to PostgreSQL with a normal migration workflow.
+The project uses Alembic on top of SQLAlchemy. Cloud uses Postgres on AWS RDS; SQLite remains useful for local disposable backend runs.
 
 Run the latest migrations:
 
@@ -233,8 +235,8 @@ Current notes:
 
 - `app.database.init_db()` bootstraps the current SQLAlchemy schema and stamps the initial Alembic revision for MVP convenience.
 - For deployed environments, prefer running `alembic upgrade head` during startup or deployment.
-- Keep schema changes SQLAlchemy-portable so the later move from SQLite to PostgreSQL stays cheap.
-- Existing local SQLite files created before Alembic was added are stamped to the initial revision on next app startup.
+- Keep schema changes SQLAlchemy-portable so local SQLite and cloud Postgres stay aligned.
+- Existing local SQLite files created before Alembic was added are stamped to the current revision on next app startup.
 - Current schema reference: [`docs/db/SCHEMA.md`](/Users/sayyid/Documents/github-multi/agentic-vr/agentic-vr-backend/docs/db/SCHEMA.md)
 
 ## Run Tests
@@ -309,7 +311,7 @@ curl http://localhost:8000/health
 
 ### `GET /health/db`
 
-Checks database connectivity and SQLite integrity details.
+Checks database connectivity. SQLite integrity details are returned only when SQLite is the active database.
 
 Example:
 
@@ -321,10 +323,10 @@ Response includes:
 
 - `status`
 - `database`
-- `databasePath`
-- `sqliteVersion`
-- `quickCheck`
-- `journalMode`
+- `databasePath`, for SQLite only
+- `sqliteVersion`, for SQLite only
+- `quickCheck`, for SQLite only
+- `journalMode`, for SQLite only
 - `schemaRevision`
 
 ### `POST /api/bedrock/test`
