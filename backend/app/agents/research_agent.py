@@ -66,6 +66,7 @@ class ResearchAgent:
                     title=title,
                     url=url,
                     snippet=(citation.get("text") or "")[:280],
+                    imageUrl=citation.get("image"),
                 )
             )
 

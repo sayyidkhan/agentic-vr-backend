@@ -320,6 +320,7 @@ class ResearchSource(BaseModel):
     title: str
     url: str
     snippet: str
+    imageUrl: str | None = None
 
 
 class ResearchResponse(BaseModel):
