@@ -123,7 +123,31 @@ CLOUD_DATABASE_URL=postgresql+psycopg://sceneverse:<password>@<rds-endpoint>:543
 CLOUD_S3_VIDEO_BUCKET=<dev-or-prod-video-bucket>
 ```
 
-Run the API:
+Run the API against the shared cloud stack:
+
+```bash
+./scripts/run_cloud_backend_local.sh
+```
+
+This opens an SSH tunnel from `127.0.0.1:15432` to the private RDS Postgres instance through the EC2 host, then starts
+FastAPI on `localhost:8000` with:
+
+```text
+SCENEVERSE_PROFILE=cloud
+DATABASE_URL=postgresql+psycopg://...@127.0.0.1:15432/sceneverse
+MEDIA_STORAGE_BACKEND=s3
+```
+
+Use this for normal backend development so local code reads/writes the same RDS Postgres database and S3 media store
+as the deployed backend. Then run the frontend in local-proxy mode if you want browser traffic to hit your local
+FastAPI process:
+
+```bash
+cd ../../agentic-vr-frontend
+npm run dev:local
+```
+
+Run the API against disposable local SQLite only when you intentionally want an isolated local backend:
 
 ```bash
 uvicorn app.main:app --reload
