@@ -13,7 +13,15 @@ import app.main as app_main
 
 from app.config import Settings
 from app.main import app
-from app.models.schemas import AgentTraceStep, AnalyzeSceneResponse, Character, ResearchResponse, ResearchSource, Scene
+from app.models.schemas import (
+    AgentTraceStep,
+    AnalyzeSceneResponse,
+    Character,
+    ResearchResponse,
+    ResearchSource,
+    Scene,
+    SpeechCharacterPreset,
+)
 from app.services.video_storage import VideoStorageService
 
 
@@ -43,6 +51,22 @@ def test_sceneverse_profile_pairs_database_and_media_storage():
     assert cloud_settings.media_storage_backend == "s3"
     assert cloud_settings.s3_video_bucket == "sceneverse-dev-videos"
     assert cloud_settings.media_cdn_base_url == "https://cdn.example.com"
+
+    speech_settings = Settings(
+        _env_file=None,
+        elevenlabs_api_key="test-key",
+        elevenlabs_yoda_voice_id="voice-yoda",
+        elevenlabs_vader_voice_id="voice-vader",
+        speechmatics_api_key="speechmatics-key",
+    )
+    assert speech_settings.elevenlabs_api_key == "test-key"
+    assert speech_settings.elevenlabs_tts_model_id == "eleven_multilingual_v2"
+    assert speech_settings.elevenlabs_output_format == "mp3_44100_128"
+    assert speech_settings.elevenlabs_yoda_voice_id == "voice-yoda"
+    assert speech_settings.elevenlabs_vader_voice_id == "voice-vader"
+    assert speech_settings.speechmatics_api_key == "speechmatics-key"
+    assert speech_settings.speechmatics_tts_output_format == "wav_16000"
+    assert speech_settings.speechmatics_tts_voice_id == "jack"
 
 
 def test_s3_upload_without_credentials_returns_actionable_error(monkeypatch):
@@ -119,8 +143,12 @@ def test_scene_chat_research_checkout_flow():
     original_research_agent = app_main.research_agent
     original_scene_parser = app_main.scene_parser
     original_checkout_service = app_main.checkout_service
+    original_openai_realtime_service = app_main.openai_realtime_service
+    original_elevenlabs_speech_service = app_main.elevenlabs_speech_service
+    original_speechmatics_speech_service = app_main.speechmatics_speech_service
     original_orchestrator_research_agent = app_main.orchestrator.research_agent
     original_media_storage_backend = app_main.settings.media_storage_backend
+    original_elevenlabs_api_key = app_main.settings.elevenlabs_api_key
 
     class StubBedrockRuntime:
         def probe(self, prompt: str):
@@ -232,6 +260,54 @@ def test_scene_chat_research_checkout_flow():
                 mode="simulated",
             )
 
+    class StubElevenLabsSpeechService:
+        def list_character_presets(self):
+            return [
+                SpeechCharacterPreset(
+                    character="yoda",
+                    label="Yoda",
+                    predefinedText="Ready for the demo, we are.",
+                    voiceIdConfigured=True,
+                ),
+                SpeechCharacterPreset(
+                    character="vader",
+                    label="Darth Vader",
+                    predefinedText="The scene is now under my command.",
+                    voiceIdConfigured=True,
+                ),
+            ]
+
+        def synthesize_predefined(self, character):
+            return self.synthesize(character=character, text=f"{character} predefined")
+
+        def synthesize(self, character, text):
+            return SimpleNamespace(
+                character=character,
+                provider="elevenlabs",
+                voice_id=f"voice-{character}",
+                model_id="eleven_multilingual_v2",
+                output_format="mp3_44100_128",
+                text=text,
+                content=f"{character}:{text}".encode("utf-8"),
+                media_type="audio/mpeg",
+                filename=f"sceneverse-{character}.mp3",
+            )
+
+    class StubSpeechmaticsSpeechService:
+        def synthesize(self, character, text):
+            normalized_character = character.strip().lower().replace(" ", "_")
+            return SimpleNamespace(
+                character=normalized_character,
+                provider="speechmatics",
+                voice_id="jack",
+                model_id="speechmatics-preview-tts",
+                output_format="wav_16000",
+                text=text,
+                content=f"{normalized_character}:{text}".encode("utf-8"),
+                media_type="audio/wav",
+                filename=f"sceneverse-{normalized_character}.wav",
+            )
+
     class StubSceneParser:
         def analyze(self, payload):
             scene_id = f"scene_stub_{uuid.uuid4().hex[:8]}"
@@ -296,13 +372,20 @@ def test_scene_chat_research_checkout_flow():
         app_main.research_agent = StubResearchAgent()
         app_main.scene_parser = StubSceneParser()
         app_main.checkout_service = StubCheckoutService()
+        app_main.elevenlabs_speech_service = StubElevenLabsSpeechService()
+        app_main.speechmatics_speech_service = StubSpeechmaticsSpeechService()
         app_main.orchestrator.research_agent = StubResearchAgent()
         app_main.settings.media_storage_backend = "local"
+        app_main.settings.elevenlabs_api_key = "test-key"
 
         with TestClient(app) as client:
             health = client.get("/health")
             assert health.status_code == 200
             assert health.json()["status"] == "ok"
+
+            speech_test_page = client.get("/api/speech/test")
+            assert speech_test_page.status_code == 200
+            assert "SceneVerse TTS Test" in speech_test_page.text
 
             bedrock_probe = client.post("/api/bedrock/test", json={})
             assert bedrock_probe.status_code == 200
@@ -324,6 +407,37 @@ def test_scene_chat_research_checkout_flow():
             assert model_probe_all.status_code == 200
             assert model_probe_all.json()["status"] == "ok"
             assert len(model_probe_all.json()["results"]) == 3
+
+            speech_characters = client.get("/api/speech/characters")
+            assert speech_characters.status_code == 200
+            assert speech_characters.json()["provider"] == "hybrid"
+            assert speech_characters.json()["apiKeyConfigured"] is True
+            assert speech_characters.json()["characters"][0]["character"] == "yoda"
+
+            yoda_speech = client.post("/api/speech/predefined/yoda")
+            assert yoda_speech.status_code == 200
+            assert yoda_speech.headers["content-type"] == "audio/mpeg"
+            assert yoda_speech.headers["x-sceneverse-speech-character"] == "yoda"
+            assert yoda_speech.content == b"yoda:yoda predefined"
+
+            vader_speech = client.post(
+                "/api/speech/synthesize",
+                json={"character": "vader", "text": "You do not know the power of the demo."},
+            )
+            assert vader_speech.status_code == 200
+            assert vader_speech.headers["x-sceneverse-speech-character"] == "vader"
+            assert vader_speech.headers["x-sceneverse-speech-provider"] == "elevenlabs"
+            assert vader_speech.content == b"vader:You do not know the power of the demo."
+
+            custom_character_speech = client.post(
+                "/api/speech/synthesize",
+                json={"character": "Maya", "text": "We should keep moving."},
+            )
+            assert custom_character_speech.status_code == 200
+            assert custom_character_speech.headers["content-type"] == "audio/wav"
+            assert custom_character_speech.headers["x-sceneverse-speech-character"] == "maya"
+            assert custom_character_speech.headers["x-sceneverse-speech-provider"] == "speechmatics"
+            assert custom_character_speech.content == b"maya:We should keep moving."
 
             db_health = client.get("/health/db")
             assert db_health.status_code == 200
@@ -539,5 +653,9 @@ def test_scene_chat_research_checkout_flow():
         app_main.research_agent = original_research_agent
         app_main.scene_parser = original_scene_parser
         app_main.checkout_service = original_checkout_service
+        app_main.openai_realtime_service = original_openai_realtime_service
+        app_main.elevenlabs_speech_service = original_elevenlabs_speech_service
+        app_main.speechmatics_speech_service = original_speechmatics_speech_service
         app_main.orchestrator.research_agent = original_orchestrator_research_agent
         app_main.settings.media_storage_backend = original_media_storage_backend
+        app_main.settings.elevenlabs_api_key = original_elevenlabs_api_key

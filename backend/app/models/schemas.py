@@ -106,6 +106,26 @@ class RealtimeTranscriptionTokenResponse(BaseModel):
     turnDetection: RealtimeTurnDetection
 
 
+class SpeechCharacterPreset(BaseModel):
+    character: str
+    label: str
+    predefinedText: str
+    voiceIdConfigured: bool
+
+
+class SpeechCharacterListResponse(BaseModel):
+    provider: Literal["elevenlabs", "speechmatics", "hybrid"]
+    modelId: str
+    outputFormat: str
+    apiKeyConfigured: bool
+    characters: list[SpeechCharacterPreset]
+
+
+class SpeechSynthesisRequest(BaseModel):
+    character: str = Field(min_length=1, max_length=80)
+    text: Optional[str] = Field(default=None, min_length=1, max_length=3000)
+
+
 class VideoMetadata(BaseModel):
     videoId: Optional[str] = None
     title: Optional[str] = None

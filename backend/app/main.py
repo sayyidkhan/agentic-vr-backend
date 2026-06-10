@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import MetaData, Table, func, inspect, select, text
 from sqlalchemy.orm import Session
@@ -40,6 +41,8 @@ from app.models.schemas import (
     ModelProbeRequest,
     ModelProbeResponse,
     RealtimeTranscriptionTokenResponse,
+    SpeechCharacterListResponse,
+    SpeechSynthesisRequest,
     VideoAsset,
     VideoListResponse,
     HealthResponse,
@@ -51,8 +54,18 @@ from app.models.schemas import (
 )
 from app.services.bedrock_runtime import BedrockRuntimeService
 from app.services.checkout import CheckoutError, CheckoutService, StripeWebhookError
+from app.services.elevenlabs_speech import (
+    ElevenLabsConfigurationError,
+    ElevenLabsSpeechError,
+    ElevenLabsSpeechService,
+)
 from app.services.model_runtime import ModelRuntimeService
 from app.services.openai_realtime import OpenAIRealtimeError, OpenAIRealtimeService
+from app.services.speechmatics_speech import (
+    SpeechmaticsConfigurationError,
+    SpeechmaticsSpeechError,
+    SpeechmaticsSpeechService,
+)
 from app.services.video_storage import VideoStorageService
 from app.store.sqlite_store import DuplicateVideoReferenceError, SQLiteStore
 
@@ -84,6 +97,8 @@ bedrock_runtime = BedrockRuntimeService(settings=settings)
 model_runtime = ModelRuntimeService(settings=settings)
 checkout_service = CheckoutService(settings=settings)
 openai_realtime_service = OpenAIRealtimeService(settings=settings)
+elevenlabs_speech_service = ElevenLabsSpeechService(settings=settings)
+speechmatics_speech_service = SpeechmaticsSpeechService(settings=settings)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -123,6 +138,325 @@ def create_realtime_transcription_token() -> RealtimeTranscriptionTokenResponse:
         return openai_realtime_service.create_transcription_token()
     except OpenAIRealtimeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+def _speech_audio_response(audio) -> Response:
+    return Response(
+        content=audio.content,
+        media_type=audio.media_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{audio.filename}"',
+            "X-SceneVerse-Speech-Character": audio.character,
+            "X-SceneVerse-Speech-Provider": audio.provider,
+            "X-SceneVerse-Speech-Model": audio.model_id,
+            "X-SceneVerse-Speech-Format": audio.output_format,
+        },
+    )
+
+
+def _is_primary_elevenlabs_character(character: str) -> bool:
+    return character.strip().lower() in {"yoda", "vader", "darth vader"}
+
+
+def _normalize_primary_character(character: str) -> str:
+    normalized = character.strip().lower()
+    if normalized == "darth vader":
+        return "vader"
+    return normalized
+
+
+def _speechmatics_error_response(exc: Exception) -> HTTPException:
+    if isinstance(exc, SpeechmaticsConfigurationError):
+        return HTTPException(status_code=503, detail=str(exc))
+    if isinstance(exc, SpeechmaticsSpeechError):
+        return HTTPException(status_code=exc.status_code, detail=str(exc))
+    return HTTPException(status_code=502, detail=str(exc))
+
+
+@app.get("/api/speech/characters", response_model=SpeechCharacterListResponse)
+def list_speech_characters() -> SpeechCharacterListResponse:
+    speechmatics_ready = bool(settings.speechmatics_api_key)
+    return SpeechCharacterListResponse(
+        provider="hybrid" if speechmatics_ready else "elevenlabs",
+        modelId=f"{settings.elevenlabs_tts_model_id}+speechmatics-preview-tts",
+        outputFormat=f"{settings.elevenlabs_output_format}|{settings.speechmatics_tts_output_format}",
+        apiKeyConfigured=bool(settings.elevenlabs_api_key or settings.speechmatics_api_key),
+        characters=[
+            preset.model_copy(update={"voiceIdConfigured": preset.voiceIdConfigured or speechmatics_ready})
+            for preset in elevenlabs_speech_service.list_character_presets()
+        ],
+    )
+
+
+@app.get("/api/speech/test", response_class=HTMLResponse)
+def speech_test_page() -> str:
+    return """
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SceneVerse TTS Test</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #10141d;
+        color: #f3f7fb;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+      }
+      main {
+        width: min(760px, 100%);
+        display: grid;
+        gap: 16px;
+      }
+      section {
+        border: 1px solid #2e394d;
+        background: #161c28;
+        border-radius: 8px;
+        padding: 20px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+      }
+      p {
+        margin: 0 0 16px;
+        color: #b9c5d5;
+        line-height: 1.45;
+      }
+      label {
+        display: grid;
+        gap: 8px;
+        margin: 14px 0;
+        color: #d7e0ec;
+        font-size: 14px;
+      }
+      input,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #3a465b;
+        border-radius: 6px;
+        background: #0d1119;
+        color: #f3f7fb;
+        padding: 10px 12px;
+        font: inherit;
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      button {
+        border: 1px solid #4f6079;
+        border-radius: 6px;
+        background: #253249;
+        color: #ffffff;
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #2f6fed;
+        border-color: #2f6fed;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      audio {
+        width: 100%;
+        margin-top: 14px;
+      }
+      code,
+      output {
+        display: block;
+        white-space: pre-wrap;
+        word-break: break-word;
+        border-radius: 6px;
+        background: #0d1119;
+        color: #dbe7f7;
+        padding: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>SceneVerse TTS Test</h1>
+        <p>Maya tests Speechmatics TTS. Yoda and Vader test ElevenLabs and require an API key with text-to-speech permission.</p>
+        <div class="row">
+          <button type="button" data-preset="maya">Maya fallback</button>
+          <button type="button" data-preset="yoda">Yoda preset</button>
+          <button type="button" data-preset="vader">Vader preset</button>
+        </div>
+        <label>
+          Character
+          <input id="character" value="Maya" autocomplete="off" />
+        </label>
+        <label>
+          Text
+          <textarea id="text">We should keep moving. The scene is ready for the next shot.</textarea>
+        </label>
+        <div class="row">
+          <button class="primary" id="synthesize" type="button">Generate speech</button>
+          <button id="clear" type="button">Clear audio</button>
+        </div>
+        <audio id="audio" controls></audio>
+      </section>
+      <section>
+        <p>Request</p>
+        <code id="request-preview"></code>
+        <p>Status</p>
+        <output id="status">Ready.</output>
+      </section>
+    </main>
+    <script>
+      const character = document.querySelector("#character");
+      const text = document.querySelector("#text");
+      const synthesize = document.querySelector("#synthesize");
+      const clear = document.querySelector("#clear");
+      const audio = document.querySelector("#audio");
+      const requestPreview = document.querySelector("#request-preview");
+      const status = document.querySelector("#status");
+      let currentUrl = null;
+
+      const presets = {
+        yoda: {
+          character: "yoda",
+          text: "Ready for the demo, we are. Strong with SceneVerse, this experience is."
+        },
+        vader: {
+          character: "vader",
+          text: "The scene is now under my command. Do not underestimate the power of this experience."
+        },
+        maya: {
+          character: "Maya",
+          text: "We should keep moving. The scene is ready for the next shot."
+        }
+      };
+
+      function requestBody() {
+        return {
+          character: character.value.trim(),
+          text: text.value.trim()
+        };
+      }
+
+      function updatePreview() {
+        requestPreview.textContent = "POST /api/speech/synthesize\\n" + JSON.stringify(requestBody(), null, 2);
+      }
+
+      function releaseAudio() {
+        if (currentUrl) {
+          URL.revokeObjectURL(currentUrl);
+          currentUrl = null;
+        }
+        audio.removeAttribute("src");
+      }
+
+      async function generateSpeech() {
+        releaseAudio();
+        const body = requestBody();
+        if (!body.character || !body.text) {
+          status.textContent = "Character and text are both required.";
+          return;
+        }
+
+        synthesize.disabled = true;
+        status.textContent = "Calling /api/speech/synthesize...";
+        try {
+          const response = await fetch("/api/speech/synthesize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          const provider = response.headers.get("x-sceneverse-speech-provider") || "unknown";
+          const contentType = response.headers.get("content-type") || "unknown";
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+          }
+          const blob = await response.blob();
+          currentUrl = URL.createObjectURL(blob);
+          audio.src = currentUrl;
+          await audio.play().catch(() => {});
+          status.textContent = `OK: ${provider}, ${contentType}, ${blob.size} bytes`;
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : String(error);
+        } finally {
+          synthesize.disabled = false;
+        }
+      }
+
+      document.querySelectorAll("[data-preset]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const preset = presets[button.dataset.preset];
+          character.value = preset.character;
+          text.value = preset.text;
+          updatePreview();
+        });
+      });
+      character.addEventListener("input", updatePreview);
+      text.addEventListener("input", updatePreview);
+      synthesize.addEventListener("click", generateSpeech);
+      clear.addEventListener("click", () => {
+        releaseAudio();
+        status.textContent = "Audio cleared.";
+      });
+      updatePreview();
+    </script>
+  </body>
+</html>
+    """
+
+
+@app.post("/api/speech/predefined/{character}")
+def create_predefined_speech(character: str) -> Response:
+    try:
+        return _speech_audio_response(elevenlabs_speech_service.synthesize_predefined(_normalize_primary_character(character)))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ElevenLabsConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ElevenLabsSpeechError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@app.post("/api/speech/synthesize")
+def synthesize_speech(payload: SpeechSynthesisRequest) -> Response:
+    try:
+        if _is_primary_elevenlabs_character(payload.character):
+            character = _normalize_primary_character(payload.character)
+            if payload.text is None:
+                return _speech_audio_response(elevenlabs_speech_service.synthesize_predefined(character))
+            return _speech_audio_response(elevenlabs_speech_service.synthesize(character=character, text=payload.text))
+
+        if payload.text is None:
+            raise ValueError("Custom character speech requires text")
+        return _speech_audio_response(
+            speechmatics_speech_service.synthesize(character=payload.character, text=payload.text)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ElevenLabsConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ElevenLabsSpeechError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except (SpeechmaticsConfigurationError, SpeechmaticsSpeechError) as exc:
+        raise _speechmatics_error_response(exc) from exc
 
 
 @app.get("/health/db", response_model=DatabaseHealthResponse)

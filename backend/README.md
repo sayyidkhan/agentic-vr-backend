@@ -17,6 +17,7 @@ It uses AWS RDS Postgres for shared cloud persistence and keeps SQLite available
 - Creates character cards with goals, emotional state, and knowledge boundaries.
 - Routes chat through a lightweight orchestrator.
 - Supports Character Agent, Director Agent, Memory Agent, and Exa-backed Research Agent flows.
+- Generates Yoda/Darth demo speech through ElevenLabs Text to Speech, with Speechmatics TTS fallback for other characters.
 - Persists scene state, characters, conversation turns, and research summaries in SQLAlchemy-backed storage.
 - Persists uploaded video metadata and external video references in the database while media files live locally or in S3.
 - Returns `agentTrace` arrays so the frontend can show visible multi-agent coordination.
@@ -203,6 +204,14 @@ CLOUD_S3_VIDEO_BUCKET=sceneverse-videos-647526506319-us-east-1
 CLOUD_MEDIA_CDN_BASE_URL=https://d2h4eibmqeyvnj.cloudfront.net
 
 OPENAI_API_KEY=
+SPEECHMATICS_API_KEY=
+SPEECHMATICS_TTS_OUTPUT_FORMAT=wav_16000
+SPEECHMATICS_TTS_VOICE_ID=jack
+ELEVENLABS_API_KEY=
+ELEVENLABS_TTS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
+ELEVENLABS_YODA_VOICE_ID=IVEX784MKkjr9nEHMibz
+ELEVENLABS_VADER_VOICE_ID=7oa7pPaxPaXjMQXRCP8y
 EXA_API_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
@@ -214,6 +223,11 @@ AWS_BEARER_TOKEN_BEDROCK=
 Current behavior:
 
 - `OPENAI_API_KEY` is only needed if you later add OpenAI-hosted models back into the registry.
+- `SPEECHMATICS_API_KEY` enables Speechmatics Text to Speech for non-Yoda/Vader characters.
+- `ELEVENLABS_API_KEY` enables `/api/speech/*` audio generation.
+- `ELEVENLABS_YODA_VOICE_ID` and `ELEVENLABS_VADER_VOICE_ID` map the Yoda/Vader presets to the generated ElevenLabs voices named `Yoda` and `Darth`.
+- `ELEVENLABS_TTS_MODEL_ID` defaults to `eleven_multilingual_v2`.
+- `ELEVENLABS_OUTPUT_FORMAT` defaults to `mp3_44100_128`.
 - `EXA_API_KEY` is used by live scene-analysis character enrichment and `/api/research`.
 - `STRIPE_SECRET_KEY` enables Stripe Checkout Sessions for `/api/checkout`.
 - `STRIPE_WEBHOOK_SECRET` verifies signed events sent to `/api/webhooks/stripe`.
@@ -240,6 +254,18 @@ The backend exposes a minimal video/media surface for hackathon use:
 - `GET /api/videos/{videoId}` returns a single stored video record.
 - `POST /api/videos/link` stores a YouTube or external reference URL without downloading the video.
 - `POST /api/videos/upload` accepts a multipart file upload, stores it in local storage or S3, and creates the video record.
+
+## Speech APIs
+
+The speech endpoints are wired for ElevenLabs Text to Speech and start with predefined demo lines:
+
+- `GET /api/speech/characters` returns the Yoda/Vader presets and whether each voice ID is configured.
+- `POST /api/speech/predefined/yoda` returns an audio file for the Yoda demo line.
+- `POST /api/speech/predefined/vader` returns an audio file for the Vader demo line.
+- `POST /api/speech/synthesize` accepts `{"character":"yoda","text":"custom line"}`; omit `text` to use the predefined line.
+
+Until `ELEVENLABS_API_KEY` and the relevant `ELEVENLABS_*_VOICE_ID` are present, audio generation returns `503`
+with the missing setting name.
 
 ## Database Migrations
 

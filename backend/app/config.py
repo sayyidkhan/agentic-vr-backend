@@ -33,6 +33,14 @@ class Settings(BaseSettings):
         default=800,
         alias="OPENAI_REALTIME_VAD_SILENCE_DURATION_MS",
     )
+    speechmatics_api_key: Optional[str] = Field(default=None, alias="SPEECHMATICS_API_KEY")
+    speechmatics_tts_output_format: str = Field(default="wav_16000", alias="SPEECHMATICS_TTS_OUTPUT_FORMAT")
+    speechmatics_tts_voice_id: str = Field(default="jack", alias="SPEECHMATICS_TTS_VOICE_ID")
+    elevenlabs_api_key: Optional[str] = Field(default=None, alias="ELEVENLABS_API_KEY")
+    elevenlabs_tts_model_id: str = Field(default="eleven_multilingual_v2", alias="ELEVENLABS_TTS_MODEL_ID")
+    elevenlabs_output_format: str = Field(default="mp3_44100_128", alias="ELEVENLABS_OUTPUT_FORMAT")
+    elevenlabs_yoda_voice_id: Optional[str] = Field(default="IVEX784MKkjr9nEHMibz", alias="ELEVENLABS_YODA_VOICE_ID")
+    elevenlabs_vader_voice_id: Optional[str] = Field(default="7oa7pPaxPaXjMQXRCP8y", alias="ELEVENLABS_VADER_VOICE_ID")
     model_registry_path: str = Field(default="app/data/enabled_models.json", alias="MODEL_REGISTRY_PATH")
     enable_live_scene_analysis: bool = Field(default=False, alias="ENABLE_LIVE_SCENE_ANALYSIS")
     scene_analysis_model_id: str = Field(default="global.anthropic.claude-sonnet-4-6", alias="SCENE_ANALYSIS_MODEL_ID")
