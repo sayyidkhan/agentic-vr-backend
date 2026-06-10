@@ -149,6 +149,7 @@ def test_scene_chat_research_checkout_flow():
     original_orchestrator_research_agent = app_main.orchestrator.research_agent
     original_media_storage_backend = app_main.settings.media_storage_backend
     original_elevenlabs_api_key = app_main.settings.elevenlabs_api_key
+    original_speechmatics_api_key = app_main.settings.speechmatics_api_key
 
     class StubBedrockRuntime:
         def probe(self, prompt: str):
@@ -377,6 +378,7 @@ def test_scene_chat_research_checkout_flow():
         app_main.orchestrator.research_agent = StubResearchAgent()
         app_main.settings.media_storage_backend = "local"
         app_main.settings.elevenlabs_api_key = "test-key"
+        app_main.settings.speechmatics_api_key = "speechmatics-key"
 
         with TestClient(app) as client:
             health = client.get("/health")
@@ -659,3 +661,4 @@ def test_scene_chat_research_checkout_flow():
         app_main.orchestrator.research_agent = original_orchestrator_research_agent
         app_main.settings.media_storage_backend = original_media_storage_backend
         app_main.settings.elevenlabs_api_key = original_elevenlabs_api_key
+        app_main.settings.speechmatics_api_key = original_speechmatics_api_key

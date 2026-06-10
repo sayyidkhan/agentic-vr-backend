@@ -9,6 +9,13 @@ from app.config import Settings
 from app.models.schemas import Character, Scene
 
 
+CHARACTER_RESPONSE_SYSTEM_PROMPT = (
+    "Stay fully in character. Answer in first person only. Keep replies crisp for spoken VR: "
+    "one or two short sentences, no more than 45 words. Use at most one brief action beat."
+)
+MAX_CHARACTER_RESPONSE_WORDS = 45
+
+
 class CharacterAgent:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -45,23 +52,23 @@ class CharacterAgent:
 
         text_blocks = [block.get("text", "") for block in response.get("output", {}).get("message", {}).get("content", []) if block.get("text")]
         output = "\n".join(text_blocks).strip()
-        return output or None
+        return self._limit_response(output) if output else None
 
     def _converse_with_boto3(self, prompt: str) -> dict:
         client = boto3.client("bedrock-runtime", region_name=self.settings.bedrock_region)
         return client.converse(
             modelId=self.settings.character_chat_model_id,
-            system=[{"text": "Stay fully in character. Be concise, emotionally grounded, and answer in first person only."}],
+            system=[{"text": CHARACTER_RESPONSE_SYSTEM_PROMPT}],
             messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"maxTokens": 220, "temperature": 0.7},
+            inferenceConfig={"maxTokens": 90, "temperature": 0.7},
         )
 
     def _converse_with_bearer_token(self, prompt: str) -> dict:
         payload = json.dumps(
             {
-                "system": [{"text": "Stay fully in character. Be concise, emotionally grounded, and answer in first person only."}],
+                "system": [{"text": CHARACTER_RESPONSE_SYSTEM_PROMPT}],
                 "messages": [{"role": "user", "content": [{"text": prompt}]}],
-                "inferenceConfig": {"maxTokens": 220, "temperature": 0.7},
+                "inferenceConfig": {"maxTokens": 90, "temperature": 0.7},
             }
         ).encode("utf-8")
         request = urllib_request.Request(
@@ -90,7 +97,7 @@ class CharacterAgent:
             f"Profile context: {character.profileSummary or 'None'}\n"
             f"Memory summary: {memory_summary}\n\n"
             "Task: Deliver a short opening line to the user in first person, staying fully in character. "
-            "Do not mention being an AI or summarize metadata. Limit to 80 words."
+            "Do not mention being an AI or summarize metadata. Limit to 35 words."
         )
 
     def _build_reply_prompt(self, *, scene: Scene, character: Character, message: str, memory_summary: str) -> str:
@@ -108,27 +115,23 @@ class CharacterAgent:
             f"Memory summary: {memory_summary}\n"
             f"User message: {message}\n\n"
             "Task: Answer the user in first person, in character, grounded in the current scene. "
-            "Do not break character, do not mention metadata, and keep the answer under 120 words."
+            "Do not break character or mention metadata. Keep it to 1-2 short spoken sentences under 45 words."
         )
 
     def _fallback_opening(self, scene: Scene, character: Character, memory_summary: str) -> str:
         goals = ", ".join(character.goals[:2]) if character.goals else "understand what is happening"
         return (
             f"{character.name}: {self._opening_for(character)} "
-            f"I am {character.role.lower()} in {scene.setting}. "
-            f"Right now I feel {character.emotionalState.lower()} and I am focused on {goals}. "
-            f"What I know so far: {memory_summary}"
+            f"I am {character.role.lower()} here, focused on {goals}. Speak plainly."
         )
 
     def _fallback_reply(self, scene: Scene, character: Character, message: str, memory_summary: str) -> str:
         goals = ", ".join(character.goals[:2]) if character.goals else "understand what is happening"
-        boundary = character.knowledgeBoundaries[0] if character.knowledgeBoundaries else "I only know what I can perceive in this scene."
 
         return (
             f"{character.name}: {self._opening_for(character)} "
-            f"You asked, \"{message}\". From where I stand in {scene.setting}, "
-            f"I am focused on {goals}. {boundary} "
-            f"What I remember from our exchange is: {memory_summary}"
+            f"You ask of \"{message}\". From this moment, I am focused on {goals}. "
+            "Ask sharper, and I will answer."
         )
 
     def _opening_for(self, character: Character) -> str:
@@ -140,3 +143,13 @@ class CharacterAgent:
         if "curious" in state or "uncertain" in state:
             return "I am still piecing this together."
         return "I can answer, but only from inside this moment."
+
+    def _limit_response(self, response: str) -> str:
+        words = response.split()
+        if len(words) <= MAX_CHARACTER_RESPONSE_WORDS:
+            return response
+
+        trimmed = " ".join(words[:MAX_CHARACTER_RESPONSE_WORDS]).rstrip(" ,;:")
+        if trimmed.endswith((".", "!", "?", "…")):
+            return trimmed
+        return f"{trimmed}."
