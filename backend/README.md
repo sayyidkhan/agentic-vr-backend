@@ -653,7 +653,8 @@ curl -X POST http://localhost:8000/api/research \
 
 ### `POST /api/checkout`
 
-Returns a Stripe Checkout URL when Stripe is wired, otherwise a simulated unlock URL.
+Returns a Stripe Checkout URL when Stripe is wired, otherwise a simulated unlock URL. The frontend can pass
+agent-discovered commerce items so the Checkout Session is itemized and carries scene/agent metadata.
 
 Example:
 
@@ -662,7 +663,18 @@ curl -X POST http://localhost:8000/api/checkout \
   -H "content-type: application/json" \
   -d '{
     "sceneId": "scene_xxx",
-    "unlockType": "premium_scene"
+    "unlockType": "agentic_commerce_cart",
+    "agentName": "Vera Commerce Agent",
+    "agentReason": "The viewer asked where to buy the green lightsaber in the active scene.",
+    "items": [
+      {
+        "title": "Yoda Legacy LIGHTSABER Hilt Set",
+        "sourceTitle": "Disney Store",
+        "sourceUrl": "https://www.disneystore.com/",
+        "summary": "An Exa-enriched collectible match for the scene object.",
+        "quantity": 1
+      }
+    ]
   }'
 ```
 

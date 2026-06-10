@@ -638,7 +638,21 @@ def test_scene_chat_research_checkout_flow():
 
             checkout = client.post(
                 "/api/checkout",
-                json={"sceneId": scene["sceneId"], "unlockType": "premium_scene"},
+                json={
+                    "sceneId": scene["sceneId"],
+                    "unlockType": "agentic_commerce_cart",
+                    "agentName": "Vera Commerce Agent",
+                    "agentReason": "The viewer asked where to buy the scene object.",
+                    "items": [
+                        {
+                            "title": "Green lightsaber collectible",
+                            "sourceTitle": "Exa result",
+                            "sourceUrl": "https://example.com/lightsaber",
+                            "summary": "Agent-discovered scene commerce match.",
+                            "quantity": 1,
+                        }
+                    ],
+                },
             )
             assert checkout.status_code == 200
             assert checkout.json()["mode"] == "simulated"

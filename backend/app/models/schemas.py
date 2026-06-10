@@ -329,9 +329,20 @@ class ResearchResponse(BaseModel):
     recommendedContext: str
 
 
+class CheckoutLineItem(BaseModel):
+    title: str
+    sourceTitle: Optional[str] = None
+    sourceUrl: Optional[str] = None
+    summary: Optional[str] = None
+    quantity: int = Field(default=1, ge=1, le=20)
+
+
 class CheckoutRequest(BaseModel):
     sceneId: str
     unlockType: str = "premium_scene"
+    agentName: str = "Vera Commerce Agent"
+    agentReason: Optional[str] = None
+    items: list[CheckoutLineItem] = Field(default_factory=list)
 
 
 class CheckoutResponse(BaseModel):
