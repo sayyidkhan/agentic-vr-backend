@@ -286,6 +286,14 @@ class SQLiteStore:
             record.original_url = self._empty_string_to_none(changes["originalUrl"])
         if "playbackUrl" in changes:
             record.playback_url = self._empty_string_to_none(changes["playbackUrl"])
+        if "storageBackend" in changes and changes["storageBackend"] is not None:
+            record.storage_backend = str(changes["storageBackend"])
+        if "storageKey" in changes:
+            record.storage_key = self._empty_string_to_none(changes["storageKey"])
+        if "contentType" in changes:
+            record.content_type = self._empty_string_to_none(changes["contentType"])
+        if "fileSizeBytes" in changes:
+            record.file_size_bytes = int(changes["fileSizeBytes"]) if changes["fileSizeBytes"] is not None else None
         if "status" in changes and changes["status"] is not None:
             record.status = str(changes["status"]).strip() or "ready"
 

@@ -691,6 +691,93 @@ def delete_admin_video(video_id: str, db: Session = Depends(get_db)) -> DeleteVi
     return DeleteVideoResponse(deleted=True, videoId=video_id)
 
 
+@app.post("/api/admin/videos/{video_id}/download", response_model=VideoAsset)
+def download_video(video_id: str, db: Session = Depends(get_db)) -> VideoAsset:
+    """Download a YouTube or external video to local/S3 storage using yt-dlp."""
+    import tempfile
+    import shutil as _shutil
+    from pathlib import Path as _Path
+
+    store = SQLiteStore(db)
+    video = store.get_video(video_id)
+    if video is None:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if video.playbackUrl:
+        raise HTTPException(status_code=409, detail="Video already has a playback URL — download not needed")
+
+    source_url = video.originalUrl
+    if not source_url:
+        raise HTTPException(status_code=422, detail="Video has no source URL to download from")
+
+    try:
+        import yt_dlp  # noqa: F401
+    except ImportError:
+        raise HTTPException(status_code=500, detail="yt-dlp is not installed on the server")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        output_template = str(_Path(tmp_dir) / "%(id)s.%(ext)s")
+        ydl_opts = {
+            "format": "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/best",
+            "outtmpl": output_template,
+            "quiet": True,
+            "no_warnings": True,
+            "merge_output_format": "mp4",
+        }
+
+        try:
+            import yt_dlp as yt_dlp_mod
+            with yt_dlp_mod.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([source_url])
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"yt-dlp download failed: {exc}") from exc
+
+        downloaded_files = list(_Path(tmp_dir).glob("*.mp4"))
+        if not downloaded_files:
+            downloaded_files = list(_Path(tmp_dir).iterdir())
+        if not downloaded_files:
+            raise HTTPException(status_code=502, detail="yt-dlp produced no output file")
+
+        downloaded_path = downloaded_files[0]
+        suffix = downloaded_path.suffix.lower() or ".mp4"
+        file_size = downloaded_path.stat().st_size
+
+        storage_svc = VideoStorageService(settings)
+        storage_key = storage_svc._build_storage_key(video_id=video_id, suffix=suffix)
+        content_type = storage_svc._content_type_for_suffix(suffix)
+
+        if settings.media_storage_backend == "s3":
+            bucket = settings.s3_video_bucket
+            if not bucket:
+                raise HTTPException(status_code=500, detail="S3_VIDEO_BUCKET not configured")
+            import boto3 as _boto3
+            s3 = _boto3.client("s3", region_name=settings.aws_region)
+            try:
+                s3.upload_file(str(downloaded_path), bucket, storage_key, ExtraArgs={"ContentType": content_type})
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail=f"S3 upload failed: {exc}") from exc
+            playback_url = storage_svc._s3_playback_url(storage_key)
+            storage_backend = "s3"
+        else:
+            target = _Path(settings.media_local_dir) / storage_key
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _shutil.copy2(str(downloaded_path), str(target))
+            playback_url = storage_svc._local_playback_url(storage_key)
+            storage_backend = "local"
+
+    updated = store.update_video(video_id, {
+        "playbackUrl": playback_url,
+        "storageBackend": storage_backend,
+        "storageKey": storage_key,
+        "contentType": content_type,
+        "fileSizeBytes": file_size,
+        "status": "ready",
+    })
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Video not found after download")
+    return updated
+
+
 @app.post("/api/scenes/analyze", response_model=AnalyzeSceneResponse)
 def analyze_scene(payload: AnalyzeSceneRequest, db: Session = Depends(get_db)) -> AnalyzeSceneResponse:
     result = scene_parser.analyze(payload)
