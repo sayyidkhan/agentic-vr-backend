@@ -1,5 +1,9 @@
 # SceneVerse AI Backend
 
+<p>
+  <img src="./docs/assets/vera-logo.png" alt="Vera logo" width="280" />
+</p>
+
 FastAPI backend for SceneVerse AI, a web-first agentic movie companion that turns a paused cinematic scene into an interactive multi-agent world.
 
 Core loop:
