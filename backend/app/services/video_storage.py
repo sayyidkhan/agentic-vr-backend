@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
@@ -81,7 +85,7 @@ class VideoStorageService:
 
         upload.file.seek(0)
         try:
-            boto3.client("s3", region_name=self.settings.aws_region).upload_fileobj(
+            self._s3_client().upload_fileobj(
                 upload.file,
                 bucket,
                 storage_key,
@@ -105,6 +109,55 @@ class VideoStorageService:
         prefix = self.settings.media_storage_prefix.strip("/")
         filename = f"{video_id}{suffix or '.mp4'}"
         return f"{prefix}/{filename}" if prefix else filename
+
+    def _s3_client(self):
+        cli_credentials = self._fresh_cli_login_credentials()
+        if cli_credentials:
+            return boto3.client(
+                "s3",
+                region_name=self.settings.aws_region,
+                aws_access_key_id=cli_credentials["AccessKeyId"],
+                aws_secret_access_key=cli_credentials["SecretAccessKey"],
+                aws_session_token=cli_credentials.get("SessionToken"),
+            )
+
+        return boto3.client("s3", region_name=self.settings.aws_region)
+
+    @staticmethod
+    def _fresh_cli_login_credentials() -> dict[str, str] | None:
+        profile = os.environ.get("AWS_PROFILE")
+        expiration = os.environ.get("AWS_CREDENTIAL_EXPIRATION")
+        if not profile or not expiration:
+            return None
+
+        try:
+            expires_at = datetime.fromisoformat(expiration.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+        if expires_at > datetime.now(timezone.utc) + timedelta(minutes=5):
+            return None
+
+        try:
+            result = subprocess.run(
+                ["aws", "configure", "export-credentials", "--profile", profile, "--format", "process"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return None
+
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None
+
+        if not payload.get("AccessKeyId") or not payload.get("SecretAccessKey"):
+            return None
+
+        return payload
 
     @staticmethod
     def _get_file_size(upload: UploadFile) -> int | None:

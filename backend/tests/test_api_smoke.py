@@ -1,4 +1,6 @@
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
+import json
 from types import SimpleNamespace
 import uuid
 
@@ -62,6 +64,53 @@ def test_s3_upload_without_credentials_returns_actionable_error(monkeypatch):
 
     assert error.value.status_code == 500
     assert "AWS credentials are not available" in error.value.detail
+
+
+def test_s3_upload_refreshes_expiring_cli_login_credentials(monkeypatch):
+    captured_client_kwargs = {}
+
+    class StubS3Client:
+        def upload_fileobj(self, *args, **kwargs):
+            return None
+
+    def stub_client(*args, **kwargs):
+        captured_client_kwargs.update(kwargs)
+        return StubS3Client()
+
+    def stub_run(*args, **kwargs):
+        return SimpleNamespace(
+            stdout=json.dumps(
+                {
+                    "Version": 1,
+                    "AccessKeyId": "AKIA_TEST",
+                    "SecretAccessKey": "SECRET_TEST",
+                    "SessionToken": "TOKEN_TEST",
+                    "Expiration": "2026-06-10T06:00:00+00:00",
+                }
+            )
+        )
+
+    settings = Settings(
+        _env_file=None,
+        sceneverse_profile="cloud",
+        cloud_s3_video_bucket="sceneverse-dev-videos",
+        cloud_media_cdn_base_url="https://cdn.example.com",
+    )
+    monkeypatch.setenv("AWS_PROFILE", "sceneverse")
+    monkeypatch.setenv(
+        "AWS_CREDENTIAL_EXPIRATION",
+        (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat(),
+    )
+    monkeypatch.setattr("app.services.video_storage.subprocess.run", stub_run)
+    monkeypatch.setattr("app.services.video_storage.boto3.client", stub_client)
+    upload = SimpleNamespace(filename="demo.mp4", content_type="video/mp4", file=BytesIO(b"0" * 2048))
+
+    stored = VideoStorageService(settings).store_upload(upload, video_id="video_test")
+
+    assert stored.storage_backend == "s3"
+    assert captured_client_kwargs["aws_access_key_id"] == "AKIA_TEST"
+    assert captured_client_kwargs["aws_secret_access_key"] == "SECRET_TEST"
+    assert captured_client_kwargs["aws_session_token"] == "TOKEN_TEST"
 
 
 def test_scene_chat_research_checkout_flow():

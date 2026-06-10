@@ -15,14 +15,18 @@ settings = get_settings()
 CURRENT_SCHEMA_REVISION = "20260609_0004"
 MANAGED_TABLES = {"scenes", "characters", "conversation_turns", "research_contexts", "character_sessions", "videos"}
 
+is_sqlite = settings.database_url.startswith("sqlite")
+
 if settings.database_url.startswith("sqlite:///"):
     sqlite_path = settings.database_url.replace("sqlite:///", "", 1)
     if sqlite_path != ":memory:":
         Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
 
+connect_args = {"check_same_thread": False} if is_sqlite else {"connect_timeout": 5}
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
+    connect_args=connect_args,
+    pool_pre_ping=not is_sqlite,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -81,7 +81,11 @@ PY
 )"
 
 tunnel_pid=""
+backend_pid=""
 cleanup() {
+  if [[ -n "$backend_pid" ]]; then
+    kill "$backend_pid" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$tunnel_pid" ]]; then
     kill "$tunnel_pid" >/dev/null 2>&1 || true
   fi
@@ -95,6 +99,8 @@ else
   ssh \
     -o BatchMode=yes \
     -o ExitOnForwardFailure=yes \
+    -o ServerAliveInterval=30 \
+    -o ServerAliveCountMax=3 \
     -N \
     -L "${LOCAL_DB_HOST}:${LOCAL_DB_PORT}:${rds_endpoint}:5432" \
     "$REMOTE_HOST" &
@@ -136,4 +142,21 @@ else
 fi
 
 echo "Starting local backend on http://${BACKEND_HOST}:${BACKEND_PORT} with cloud Postgres and S3 media"
-"$python_bin" -m uvicorn app.main:app --reload --host "$BACKEND_HOST" --port "$BACKEND_PORT"
+"$python_bin" -m uvicorn app.main:app --reload --host "$BACKEND_HOST" --port "$BACKEND_PORT" &
+backend_pid="$!"
+
+while true; do
+  if ! kill -0 "$backend_pid" >/dev/null 2>&1; then
+    wait "$backend_pid"
+    exit $?
+  fi
+
+  if [[ -n "$tunnel_pid" ]] && ! kill -0 "$tunnel_pid" >/dev/null 2>&1; then
+    echo "Postgres SSH tunnel exited; stopping local backend" >&2
+    kill "$backend_pid" >/dev/null 2>&1 || true
+    wait "$backend_pid" >/dev/null 2>&1 || true
+    exit 1
+  fi
+
+  sleep 2
+done
