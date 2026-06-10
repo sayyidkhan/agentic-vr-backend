@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -81,6 +82,13 @@ class SceneParserAgent:
         )
 
     def _fallback_scene(self, payload: AnalyzeSceneRequest) -> Scene:
+        if payload.videoMetadata and (
+            payload.videoMetadata.title
+            or payload.videoMetadata.description
+            or payload.videoMetadata.agents
+        ):
+            return self._metadata_fallback_scene(payload)
+
         fallback = json.loads(self.fallback_path.read_text())
         scene_id = f"scene_{uuid4().hex[:12]}"
         video_id = payload.videoMetadata.videoId if payload.videoMetadata and payload.videoMetadata.videoId else "demo-video"
@@ -120,6 +128,73 @@ class SceneParserAgent:
             directorContext=fallback["directorContext"],
             memorySummary="",
             createdAt=None,
+            analysisMode="fallback",
+        )
+
+    def _metadata_fallback_scene(self, payload: AnalyzeSceneRequest) -> Scene:
+        scene_id = f"scene_{uuid4().hex[:12]}"
+        metadata = payload.videoMetadata
+        title = self._clean_string(metadata.title) if metadata else None
+        description = self._clean_string(metadata.description) if metadata else None
+        video_id = metadata.videoId if metadata and metadata.videoId else "catalogue-video"
+        transcript = payload.transcriptSegment or description or title
+        source_label = self._clean_string(metadata.sourceLabel) if metadata else None
+        character_names = self._candidate_character_names(metadata)
+
+        if not character_names:
+            character_names = ["Scene Guide"]
+
+        characters = [
+            Character(
+                characterId=f"{scene_id}_{self._slugify(name)}",
+                sceneId=scene_id,
+                name=name,
+                role="Character inferred from catalogue metadata",
+                personality="scene-aware, responsive, grounded in the referenced moment",
+                emotionalState="focused on the paused scene",
+                goals=[
+                    "answer from inside the current scene context",
+                    "help the viewer explore motivations, stakes, and visible details",
+                ],
+                knowledgeBoundaries=[
+                    "Only knows the catalogue metadata, supplied transcript context, and visible scene cues.",
+                    "Should avoid claiming precise plot facts that were not supplied.",
+                ],
+                speakingStyle="concise, cinematic, and grounded",
+                franchise=title,
+                identificationConfidence=0.45,
+            )
+            for name in character_names[: self.settings.scene_analysis_max_characters]
+        ]
+
+        source_note = f" from {source_label}" if source_label else ""
+        summary_parts = [
+            f"{title or 'This catalogue video'} is opened as an interactive SceneVerse moment{source_note}.",
+            description or "",
+            "The viewer can question the scene, ask characters about intent, or ask the Director for story-level context.",
+        ]
+        summary = " ".join(part for part in summary_parts if part).strip()
+
+        return Scene(
+            sceneId=scene_id,
+            videoId=video_id,
+            timestamp=payload.timestamp,
+            frameRef="inline-frame" if payload.frame else None,
+            transcriptSegment=transcript,
+            summary=summary,
+            setting=f"The referenced scene surface for {title or 'this catalogue video'}",
+            emotionalTone="uncertain, exploratory, and cinematic",
+            conflict="The viewer is trying to uncover character intent, scene stakes, and hidden tension from the available context",
+            objects=["catalogue frame", "scene setting", "character focus", "source reference"],
+            characters=characters,
+            directorContext=(
+                "Use the catalogue title, description, timestamp, and any supplied transcript as grounding. "
+                "Be transparent when a detail is inferred rather than visually confirmed."
+            ),
+            memorySummary="",
+            createdAt=None,
+            detectedWorkTitle=title,
+            detectedUniverse=title,
             analysisMode="fallback",
         )
 
@@ -211,6 +286,90 @@ class SceneParserAgent:
         if isinstance(value, (int, float)):
             return max(0.0, min(1.0, float(value)))
         return None
+
+    def _candidate_character_names(self, metadata) -> list[str]:
+        if metadata is None:
+            return []
+
+        agent_candidates: list[str] = []
+        for name in metadata.agents or []:
+            cleaned = self._clean_string(name)
+            if cleaned and self._looks_like_character_name(cleaned):
+                agent_candidates.append(cleaned)
+
+        if len(agent_candidates) >= 2:
+            return self._unique_names(agent_candidates)[:4]
+
+        candidates: list[str] = [*agent_candidates]
+
+        text = " ".join(
+            part
+            for part in [self._clean_string(metadata.description), self._clean_string(metadata.title)]
+            if part
+        )
+        for match in re.finditer(r"\b([A-Z][A-Za-z']{2,}(?:\s+[A-Z][A-Za-z']{2,}){0,2})\s*\(", text):
+            candidate = self._clean_candidate_name(match.group(1))
+            if candidate:
+                candidates.append(candidate)
+
+        normalized_text = re.sub(r"[^A-Za-z0-9' ]+", " ", text)
+        for match in re.finditer(r"\b[A-Z][A-Za-z']{2,}\b", normalized_text):
+            candidate = self._clean_candidate_name(match.group(0))
+            if candidate:
+                candidates.append(candidate)
+
+        return self._unique_names(candidates)[:4]
+
+    def _unique_names(self, candidates: list[str]) -> list[str]:
+        unique: list[str] = []
+        seen = set()
+        for candidate in candidates:
+            key = candidate.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(candidate)
+        return unique
+
+    def _clean_candidate_name(self, value: str) -> str | None:
+        words = [word.strip("'") for word in value.split() if word.strip("'")]
+        filtered = [word for word in words if self._looks_like_character_name(word)]
+        if not filtered:
+            return None
+        if len(filtered) >= 2 and filtered[0].lower() in {"leonardo", "elliot"}:
+            return None
+        return " ".join(filtered[:2])
+
+    def _looks_like_character_name(self, value: str) -> bool:
+        lowered = value.strip().lower()
+        if lowered in {
+            "vera",
+            "director",
+            "scene",
+            "agent",
+            "scene agent",
+            "youtube",
+            "official",
+            "video",
+            "remaster",
+            "the",
+            "meeting",
+            "dream",
+            "ship",
+            "duel",
+            "flying",
+            "official",
+            "remaster",
+            "movie",
+            "title",
+            "clip",
+            "moment",
+            "catalogue",
+            "linked",
+            "reference",
+        }:
+            return False
+        return bool(re.match(r"^[A-Z][A-Za-z']+(?:\s+[A-Z][A-Za-z']+)?$", value.strip()))
 
     def _slugify(self, value: str) -> str:
         cleaned = "".join(character.lower() if character.isalnum() else "_" for character in value)

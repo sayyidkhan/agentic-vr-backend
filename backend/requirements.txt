@@ -8,4 +8,5 @@ alembic==1.14.1
 psycopg[binary]>=3.2,<4
 python-multipart==0.0.20
 stripe==15.2.0
-yt-dlp>=2024.1.1
+bgutil-ytdlp-pot-provider==1.3.1
+yt-dlp[default]>=2026.6.9

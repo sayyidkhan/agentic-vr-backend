@@ -7,6 +7,9 @@ REMOTE_STAGING_DIR="${REMOTE_STAGING_DIR:-/home/ec2-user/sceneverse-staging}"
 REMOTE_DATA_DIR="${REMOTE_DATA_DIR:-/opt/sceneverse-data}"
 REMOTE_ENV_FILE="${REMOTE_ENV_FILE:-/opt/sceneverse-config/shared.env}"
 REMOTE_CONTAINER_NAME="${REMOTE_CONTAINER_NAME:-sceneverse-backend}"
+REMOTE_POT_CONTAINER_NAME="${REMOTE_POT_CONTAINER_NAME:-sceneverse-bgutil-provider}"
+REMOTE_POT_IMAGE="${REMOTE_POT_IMAGE:-brainicism/bgutil-ytdlp-pot-provider:deno}"
+REMOTE_DOCKER_NETWORK="${REMOTE_DOCKER_NETWORK:-sceneverse-net}"
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-http://18.207.53.115}"
 
 APP_NAME="${APP_NAME:-SceneVerse AI Backend}"
@@ -113,11 +116,15 @@ trap 'rm -f "$REMOTE_SCRIPT_FILE"' EXIT
   printf 'REMOTE_DATA_DIR=%q\n' "$REMOTE_DATA_DIR"
   printf 'REMOTE_ENV_FILE=%q\n' "$REMOTE_ENV_FILE"
   printf 'REMOTE_CONTAINER_NAME=%q\n' "$REMOTE_CONTAINER_NAME"
+  printf 'REMOTE_POT_CONTAINER_NAME=%q\n' "$REMOTE_POT_CONTAINER_NAME"
+  printf 'REMOTE_POT_IMAGE=%q\n' "$REMOTE_POT_IMAGE"
+  printf 'REMOTE_DOCKER_NETWORK=%q\n' "$REMOTE_DOCKER_NETWORK"
   cat <<'REMOTE_SCRIPT'
 set -euo pipefail
 
+REMOTE_CONFIG_DIR="$(dirname "$REMOTE_ENV_FILE")"
 sudo mkdir -p "$REMOTE_DATA_DIR"
-sudo mkdir -p "$(dirname "$REMOTE_ENV_FILE")"
+sudo mkdir -p "$REMOTE_CONFIG_DIR"
 sudo touch "$REMOTE_ENV_FILE"
 sudo chmod 600 "$REMOTE_ENV_FILE"
 
@@ -132,12 +139,22 @@ sudo rsync -a --delete \
 
 cd "$REMOTE_APP_DIR"
 sudo docker build -t "${REMOTE_CONTAINER_NAME}:latest" .
+sudo docker network create "$REMOTE_DOCKER_NETWORK" >/dev/null 2>&1 || true
+sudo docker rm -f "$REMOTE_POT_CONTAINER_NAME" >/dev/null 2>&1 || true
+sudo docker run -d \
+  --restart unless-stopped \
+  --init \
+  --name "$REMOTE_POT_CONTAINER_NAME" \
+  --network "$REMOTE_DOCKER_NETWORK" \
+  "$REMOTE_POT_IMAGE" >/dev/null
 sudo docker rm -f "$REMOTE_CONTAINER_NAME" >/dev/null 2>&1 || true
 sudo docker run -d \
   --restart unless-stopped \
   --name "$REMOTE_CONTAINER_NAME" \
+  --network "$REMOTE_DOCKER_NETWORK" \
   -p 80:8000 \
   -v "$REMOTE_DATA_DIR:/app/data" \
+  -v "$REMOTE_CONFIG_DIR:$REMOTE_CONFIG_DIR:ro" \
   --env-file "$REMOTE_ENV_FILE" \
   -e APP_NAME="$APP_NAME" \
   -e SCENEVERSE_PROFILE="$SCENEVERSE_PROFILE" \
@@ -145,6 +162,7 @@ sudo docker run -d \
   -e DATABASE_URL="$DATABASE_URL" \
   -e FRONTEND_URL="$FRONTEND_URL" \
   -e CORS_ORIGINS="$CORS_ORIGINS" \
+  -e YTDLP_POT_PROVIDER_BASE_URL="http://${REMOTE_POT_CONTAINER_NAME}:4416" \
   "${REMOTE_CONTAINER_NAME}:latest" >/dev/null
 
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
@@ -162,6 +180,7 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
 done
 
 sudo docker ps --filter "name=${REMOTE_CONTAINER_NAME}"
+sudo docker ps --filter "name=${REMOTE_POT_CONTAINER_NAME}"
 REMOTE_SCRIPT
 } > "$REMOTE_SCRIPT_FILE"
 

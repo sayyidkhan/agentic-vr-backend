@@ -8,3 +8,6 @@ data/
 backend/.venv/
 backend/data/
 backend/.pytest_cache/
+**/cookies.txt
+**/*.cookies.txt
+**/youtube-cookies*.txt

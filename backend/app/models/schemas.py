@@ -129,7 +129,12 @@ class SpeechSynthesisRequest(BaseModel):
 class VideoMetadata(BaseModel):
     videoId: Optional[str] = None
     title: Optional[str] = None
+    description: Optional[str] = None
     source: Optional[str] = None
+    sourceLabel: Optional[str] = None
+    sourceKind: Optional[str] = None
+    agents: list[str] = Field(default_factory=list)
+    thumbnailUrl: Optional[str] = None
 
 
 class VideoAsset(BaseModel):
@@ -171,6 +176,7 @@ class UpdateVideoRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     thumbnailUrl: Optional[str] = None
+    originalUrl: Optional[str] = None
     status: Optional[str] = None
 
 

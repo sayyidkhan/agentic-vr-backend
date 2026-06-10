@@ -213,6 +213,9 @@ ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
 ELEVENLABS_YODA_VOICE_ID=IVEX784MKkjr9nEHMibz
 ELEVENLABS_VADER_VOICE_ID=7oa7pPaxPaXjMQXRCP8y
 EXA_API_KEY=
+YTDLP_COOKIES_FILE=
+YTDLP_USER_AGENT=
+YTDLP_POT_PROVIDER_BASE_URL=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_CURRENCY=sgd
@@ -229,6 +232,9 @@ Current behavior:
 - `ELEVENLABS_TTS_MODEL_ID` defaults to `eleven_multilingual_v2`.
 - `ELEVENLABS_OUTPUT_FORMAT` defaults to `mp3_44100_128`.
 - `EXA_API_KEY` is used by live scene-analysis character enrichment and `/api/research`.
+- `YTDLP_COOKIES_FILE` points `yt-dlp` at an exported Netscape-format YouTube cookies file for server-side downloads that YouTube blocks anonymously.
+- `YTDLP_USER_AGENT` optionally pins the browser user agent used by `yt-dlp`.
+- `YTDLP_POT_PROVIDER_BASE_URL` points `yt-dlp` at a PO-token provider service when YouTube returns HTTP 403 for media URLs.
 - `STRIPE_SECRET_KEY` enables Stripe Checkout Sessions for `/api/checkout`.
 - `STRIPE_WEBHOOK_SECRET` verifies signed events sent to `/api/webhooks/stripe`.
 - Empty Stripe keys return a simulated unlock URL.
@@ -254,6 +260,9 @@ The backend exposes a minimal video/media surface for hackathon use:
 - `GET /api/videos/{videoId}` returns a single stored video record.
 - `POST /api/videos/link` stores a YouTube or external reference URL without downloading the video.
 - `POST /api/videos/upload` accepts a multipart file upload, stores it in local storage or S3, and creates the video record.
+- `POST /api/admin/videos/{video_id}/download` downloads a linked source with `yt-dlp`, stores it locally or in S3, and updates `playbackUrl`.
+
+Interactive browser frame capture requires an HTML5-playable `playbackUrl`. YouTube references should be downloaded first; if YouTube blocks anonymous server downloads, configure `YTDLP_COOKIES_FILE` or upload/use a direct MP4 source. For EC2, install cookies from the repository root with `./infra/aws/install-youtube-cookies.sh /path/to/youtube-cookies.txt`.
 
 ## Speech APIs
 

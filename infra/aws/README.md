@@ -38,6 +38,9 @@ CLOUD_DATABASE_URL=postgresql+psycopg://sceneverse:<password>@<rds-endpoint>:543
 CLOUD_S3_VIDEO_BUCKET=sceneverse-videos-647526506319-us-east-1
 CLOUD_MEDIA_STORAGE_PREFIX=videos
 CLOUD_MEDIA_CDN_BASE_URL=https://d2h4eibmqeyvnj.cloudfront.net
+YTDLP_COOKIES_FILE=/opt/sceneverse-config/youtube-cookies.txt
+YTDLP_USER_AGENT=
+YTDLP_POT_PROVIDER_BASE_URL=http://sceneverse-bgutil-provider:4416
 FRONTEND_URL=http://localhost:5173
 CORS_ORIGINS=*
 ```
@@ -45,6 +48,8 @@ CORS_ORIGINS=*
 Runtime-secret sync:
 
 - The container now reads a persisted host env file at `/opt/sceneverse-config/shared.env`.
+- The container mounts `/opt/sceneverse-config` read-only, so runtime files such as `YTDLP_COOKIES_FILE` are visible at the same absolute path inside Docker.
+- The deploy script starts a `sceneverse-bgutil-provider` sidecar for YouTube PO-token generation and points the backend at it with `YTDLP_POT_PROVIDER_BASE_URL`.
 - Sync your local backend env and deploy code in one step with:
 
 ```bash
@@ -66,6 +71,39 @@ CHARACTER_CHAT_MODEL_ID=global.anthropic.claude-haiku-4-5-20251001-v1:0 \
 ```bash
 ./infra/aws/deploy-ec2-sync.sh
 ```
+
+## YouTube Download Cookies
+
+YouTube can block anonymous server downloads with the "Sign in to confirm you are not a bot" challenge. For linked YouTube videos, SceneVerse needs a downloaded HTML5-playable copy before the browser can capture scene frames. Configure `YTDLP_COOKIES_FILE` when this happens.
+
+1. Export YouTube cookies from a logged-in browser in Netscape `cookies.txt` format.
+2. Install the file on EC2:
+
+```bash
+./infra/aws/install-youtube-cookies.sh /path/to/youtube-cookies.txt
+```
+
+The script uploads the file to `/opt/sceneverse-config/youtube-cookies.txt`, sets `600` permissions, and updates only the `YTDLP_COOKIES_FILE` line in `/opt/sceneverse-config/shared.env`.
+
+3. If you prefer configuring from local env instead, add this to `backend/.env`:
+
+```env
+YTDLP_COOKIES_FILE=/opt/sceneverse-config/youtube-cookies.txt
+```
+
+4. Redeploy so Docker mounts `/opt/sceneverse-config` and starts the PO-token provider sidecar:
+
+```bash
+./infra/aws/deploy-ec2-sync.sh
+```
+
+5. Retry the download endpoint:
+
+```bash
+curl -i -X POST http://18.207.53.115/api/admin/videos/<video_id>/download
+```
+
+Do not commit the cookies file. Treat it like a session secret and rotate it if downloads start failing again.
 
 ## First-Time SSH Setup
 

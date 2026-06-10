@@ -723,14 +723,50 @@ def download_video(video_id: str, db: Session = Depends(get_db)) -> VideoAsset:
             "quiet": True,
             "no_warnings": True,
             "merge_output_format": "mp4",
+            "noplaylist": True,
+            "retries": 2,
+            "fragment_retries": 2,
+            "socket_timeout": 30,
         }
+        if settings.ytdlp_cookies_file:
+            cookies_path = _Path(settings.ytdlp_cookies_file).expanduser()
+            if not cookies_path.exists():
+                raise HTTPException(status_code=500, detail=f"YTDLP_COOKIES_FILE does not exist: {cookies_path}")
+            runtime_cookies_path = _Path(tmp_dir) / "youtube-cookies.txt"
+            _shutil.copy2(str(cookies_path), str(runtime_cookies_path))
+            ydl_opts["cookiefile"] = str(runtime_cookies_path)
+        if settings.ytdlp_user_agent:
+            ydl_opts["http_headers"] = {"User-Agent": settings.ytdlp_user_agent}
+        if settings.ytdlp_pot_provider_base_url:
+            ydl_opts["extractor_args"] = {
+                "youtubepot-bgutilhttp": {"base_url": [settings.ytdlp_pot_provider_base_url]},
+            }
 
         try:
             import yt_dlp as yt_dlp_mod
             with yt_dlp_mod.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([source_url])
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"yt-dlp download failed: {exc}") from exc
+            error_text = str(exc)
+            if "Sign in to confirm" in error_text or "not a bot" in error_text or "cookies" in error_text:
+                raise HTTPException(
+                    status_code=424,
+                    detail=(
+                        "YouTube blocked anonymous server download, so SceneVerse cannot capture frames yet. "
+                        "Configure YTDLP_COOKIES_FILE with exported YouTube cookies, upload a source video, "
+                        f"or use a direct MP4 source. yt-dlp said: {error_text}"
+                    ),
+                ) from exc
+            if "HTTP Error 403" in error_text:
+                raise HTTPException(
+                    status_code=424,
+                    detail=(
+                        "YouTube rejected the media URL with HTTP 403. Configure a working PO-token provider "
+                        "through YTDLP_POT_PROVIDER_BASE_URL, refresh YouTube cookies, upload a source video, "
+                        f"or use a direct MP4 source. yt-dlp said: {error_text}"
+                    ),
+                ) from exc
+            raise HTTPException(status_code=502, detail=f"yt-dlp download failed: {error_text}") from exc
 
         downloaded_files = list(_Path(tmp_dir).glob("*.mp4"))
         if not downloaded_files:
