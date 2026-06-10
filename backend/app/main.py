@@ -12,6 +12,7 @@ from sqlalchemy import MetaData, Table, func, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.agents.orchestrator import OrchestratorAgent
+from app.agents.character_router_agent import CharacterRouterAgent
 from app.agents.research_agent import ResearchAgent
 from app.agents.scene_parser import SceneParserAgent
 from app.config import get_settings
@@ -19,10 +20,14 @@ from app.database import MANAGED_TABLES, get_db, init_db
 from app.models.schemas import (
     AnalyzeSceneRequest,
     AnalyzeSceneResponse,
+    AgentTraceStep,
     BedrockProbeRequest,
     BedrockProbeResponse,
     ChatRequest,
     ChatResponse,
+    CharacterChatRequest,
+    CharacterRouterRequest,
+    CharacterRouterResponse,
     CreateVideoLinkRequest,
     DatabaseTableContentsResponse,
     CheckoutRequest,
@@ -74,6 +79,7 @@ app.mount(settings.media_public_path, StaticFiles(directory=settings.media_local
 research_agent = ResearchAgent(settings=settings)
 scene_parser = SceneParserAgent(settings=settings)
 orchestrator = OrchestratorAgent(settings=settings, research_agent=research_agent)
+character_router = CharacterRouterAgent()
 bedrock_runtime = BedrockRuntimeService(settings=settings)
 model_runtime = ModelRuntimeService(settings=settings)
 checkout_service = CheckoutService(settings=settings)
@@ -354,6 +360,52 @@ def create_character_session(payload: NewCharacterSessionRequest, db: Session = 
             "What are you not telling me yet?",
         ],
     )
+
+
+@app.post("/api/character/router", response_model=CharacterRouterResponse)
+def route_character(payload: CharacterRouterRequest, db: Session = Depends(get_db)) -> CharacterRouterResponse:
+    scene = SQLiteStore(db).get_scene(payload.sceneId)
+    if scene is None:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    try:
+        return character_router.route(scene=scene, message=payload.message, target_agent_id=payload.targetAgentId)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/character/chat", response_model=ChatResponse)
+def character_chat(payload: CharacterChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+    store = SQLiteStore(db)
+    scene = store.get_scene(payload.sceneId)
+    if scene is None:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    try:
+        route = character_router.route(scene=scene, message=payload.message, target_agent_id=payload.characterId)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    character = _find_character(scene, route.targetAgent.id)
+    response_text = orchestrator.character_agent.respond(scene, character, payload.message, scene.memorySummary)
+    response_text = orchestrator.director_agent.validate_character_response(response_text)
+    responding_agent = route.targetAgent
+    updated_summary = orchestrator.memory_agent.update_summary(scene.memorySummary, payload.message, responding_agent.name)
+    agent_trace = [
+        *route.agentTrace,
+        AgentTraceStep(step="respond_in_character", agent=character.name, status="complete"),
+        AgentTraceStep(step="validate_consistency", agent="director", status="complete"),
+        AgentTraceStep(step="update_memory", agent="memory", status="complete"),
+    ]
+    response = ChatResponse(
+        respondingAgent=responding_agent,
+        response=response_text,
+        updatedMemorySummary=updated_summary,
+        agentTrace=agent_trace,
+    )
+    store.save_turn(payload.sceneId, payload.message, response)
+    store.update_memory_summary(payload.sceneId, updated_summary)
+    return response
 
 
 @app.post("/api/chat", response_model=ChatResponse)

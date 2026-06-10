@@ -360,6 +360,32 @@ def test_scene_chat_research_checkout_flow():
             assert character_session_data["character"]["characterId"] == scene["characters"][0]["characterId"]
             assert character_session_data["characterSessionId"].startswith("character_session_")
 
+            character_route = client.post(
+                "/api/character/router",
+                json={
+                    "sceneId": scene["sceneId"],
+                    "message": "I want to ask Ren why he is hiding the route.",
+                },
+            )
+            assert character_route.status_code == 200
+            character_route_data = character_route.json()
+            assert character_route_data["targetAgent"]["name"] == "Ren"
+            assert character_route_data["targetAgent"]["type"] == "character"
+            assert character_route_data["confidence"] > 0
+
+            character_chat = client.post(
+                "/api/character/chat",
+                json={
+                    "sceneId": scene["sceneId"],
+                    "message": "Ren, what are you not telling us about the route?",
+                },
+            )
+            assert character_chat.status_code == 200
+            character_chat_data = character_chat.json()
+            assert character_chat_data["respondingAgent"]["name"] == "Ren"
+            assert character_chat_data["respondingAgent"]["type"] == "character"
+            assert character_chat_data["response"]
+
             scene_rows = client.get("/api/db/scenes", params={"limit": 10})
             assert scene_rows.status_code == 200
             assert scene_rows.json()["rowCount"] >= initial_scene_count + 1

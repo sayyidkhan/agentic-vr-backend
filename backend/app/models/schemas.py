@@ -247,10 +247,30 @@ class ChatRequest(BaseModel):
     targetAgentId: Optional[str] = None
 
 
+class CharacterRouterRequest(BaseModel):
+    sceneId: str
+    message: str = Field(min_length=1)
+    targetAgentId: Optional[str] = None
+
+
+class CharacterChatRequest(BaseModel):
+    sceneId: str
+    message: str = Field(min_length=1)
+    characterId: Optional[str] = None
+
+
 class RespondingAgent(BaseModel):
     id: str
     name: str
     type: Literal["character", "director", "research", "fallback"]
+
+
+class CharacterRouterResponse(BaseModel):
+    sceneId: str
+    targetAgent: RespondingAgent
+    reason: str
+    confidence: float = Field(ge=0, le=1)
+    agentTrace: list[AgentTraceStep]
 
 
 class ChatResponse(BaseModel):
